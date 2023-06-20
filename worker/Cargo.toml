@@ -13,3 +13,5 @@ stderrlog = "*"
 # utilities
 anyhow = "*"
 once_cell = "*"
+# docker
+docker-api = "*"
