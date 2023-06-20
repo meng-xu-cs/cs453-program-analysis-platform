@@ -1,0 +1,21 @@
+[package]
+name = "cs453-pap-server"
+description = "CS453 Program Analysis Platform Server"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+# http
+hyper = { version = "1.0.0-rc.3", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+http-body-util = "0.1.0-rc.2"
+# auth
+ssh-key = { version = "*", features = ["ed25519"] }
+# logging
+log = "*"
+stderrlog = "*"
+# utilities
+anyhow = "*"
+once_cell = "*"

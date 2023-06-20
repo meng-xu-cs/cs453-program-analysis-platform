@@ -1,0 +1,15 @@
+[package]
+name = "cs453-pap-worker"
+description = "CS453 Program Analysis Platform Worker"
+version = "0.1.0"
+authors = ["Meng Xu <meng.xu.cs@uwaterloo.ca>"]
+license = "GPL-3.0"
+edition = "2021"
+
+[dependencies]
+# logging
+log = "*"
+stderrlog = "*"
+# utilities
+anyhow = "*"
+once_cell = "*"
