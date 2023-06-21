@@ -11,6 +11,7 @@ use log::{debug, error, info};
 use tokio::runtime;
 
 const UNIX_SOCKET: &str = "/var/run/docker.sock";
+const DEFAULT_PLATFORM: &str = "linux/amd64";
 
 /// Utility for waiting for async actions
 fn wait_for<F: Future>(future: F) -> F::Output {
@@ -109,7 +110,11 @@ impl Dock {
     /// Build an image from a Dockerfile
     async fn _build_async(&mut self, path: &Path, tag: &str) -> Result<()> {
         let images = self.docker.images();
-        let opts = ImageBuildOpts::builder(path).tag(tag).nocahe(true).build();
+        let opts = ImageBuildOpts::builder(path)
+            .tag(tag)
+            .nocahe(true)
+            .platform(DEFAULT_PLATFORM)
+            .build();
         let mut stream = images.build(&opts);
         while let Some(frame) = stream.next().await {
             let frame = frame?;
