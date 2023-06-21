@@ -17,4 +17,6 @@ once_cell = "*"
 futures-util = "*"
 tokio = "*"
 # docker
-docker-api = "*"
+memfile = "*"
+tar = "*"
+bollard = "*"
