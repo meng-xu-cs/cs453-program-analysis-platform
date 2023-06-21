@@ -141,7 +141,7 @@ impl Dock {
         let opts = RemoveContainerOptions {
             force: true,
             v: true,
-            link: true,
+            ..Default::default()
         };
         wait_for(self.docker.remove_container(&id.0, Some(opts)))?;
         debug!("[docker] container \"{}\" deleted", id.0);
@@ -260,7 +260,7 @@ impl Dock {
         &mut self,
         tag: &str,
         name: Option<String>,
-        cmds: Vec<String>,
+        cmd: String,
         tty: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
@@ -296,8 +296,7 @@ impl Dock {
             network_disabled: Some(true),
             image: Some(image_id.0),
             working_dir: workdir,
-            shell: Some((0..cmds.len()).map(|_| "/bin/bash".to_string()).collect()),
-            cmd: Some(cmds),
+            cmd: Some(vec![cmd]),
             host_config: Some(HostConfig {
                 binds: Some(
                     binding
@@ -322,23 +321,41 @@ impl Dock {
         let container_id = ContainerID(result.id);
 
         // start the container
-        wait_for(self.docker.start_container::<String>(&container_id.0, None))?;
+        match wait_for(self.docker.start_container::<String>(&container_id.0, None)) {
+            Ok(()) => (),
+            Err(err) => {
+                self.del_container(&container_id)?;
+                bail!(err);
+            }
+        }
 
         // wait for the termination of the container
-        let exec_ok = wait_for(self._exec_async(&container_id))?;
+        let exec_ok = match wait_for(self._exec_async(&container_id)) {
+            Ok(r) => r,
+            Err(err) => {
+                self.del_container(&container_id)?;
+                bail!(err);
+            }
+        };
 
         // decide if we need to commit or remove the container
         if let Some(commit) = name {
             if exec_ok {
                 // commit the container
-                wait_for(self.docker.commit_container(
+                match wait_for(self.docker.commit_container(
                     CommitContainerOptions {
                         container: container_id.0.clone(),
                         repo: commit,
                         ..Default::default()
                     },
                     Config::<String>::default(),
-                ))?;
+                )) {
+                    Ok(_) => (),
+                    Err(err) => {
+                        self.del_container(&container_id)?;
+                        bail!(err);
+                    }
+                }
             }
         }
 
@@ -354,7 +371,7 @@ impl Dock {
         &mut self,
         tag: &str,
         name: &str,
-        cmds: Vec<String>,
+        cmd: String,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
         force: bool,
@@ -374,7 +391,7 @@ impl Dock {
         }
 
         // incremental build
-        let exec_ok = self._run(tag, Some(name.to_string()), cmds, false, binding, workdir)?;
+        let exec_ok = self._run(tag, Some(name.to_string()), cmd, false, binding, workdir)?;
         if !exec_ok {
             bail!("aborting commit due to execution failure");
         }

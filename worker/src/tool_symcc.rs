@@ -18,16 +18,13 @@ static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
     path
 });
 
-/// Provision the KLEE tool
+/// Provision the SymCC tool
 pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
     dock.build(DOCKER_PATH.as_path(), DOCKER_TAG_BASE, force)?;
     dock.commit(
         DOCKER_TAG_BASE,
         DOCKER_TAG,
-        vec![
-            "sudo apt-get update -y".to_string(),
-            "sudo apt-get install -y screen".to_string(),
-        ],
+        "/usr/bin/bash -c \"sudo apt-get update -y && sudo apt-get install -y screen\"".to_string(),
         BTreeMap::new(),
         None,
         true,
