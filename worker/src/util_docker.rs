@@ -107,15 +107,15 @@ impl Dock {
     }
 
     /// Build an image from a Dockerfile
-    fn _build(&mut self, path: &Path, tag: &str) -> Result<()> {
+    async fn _build_async(&mut self, path: &Path, tag: &str) -> Result<()> {
         let images = self.docker.images();
         let opts = ImageBuildOpts::builder(path).tag(tag).nocahe(true).build();
         let mut stream = images.build(&opts);
-        while let Some(frame) = wait_for(stream.next()) {
+        while let Some(frame) = stream.next().await {
             let frame = frame?;
             match frame {
                 ImageBuildChunk::Update { stream } => {
-                    info!("[docker] {}", stream);
+                    print!("{}", stream);
                 }
                 ImageBuildChunk::Error {
                     error,
@@ -138,6 +138,7 @@ impl Dock {
 
     /// Build an image from a Dockerfile, delete or reuse previous image depending on flag
     pub fn build(&mut self, path: &Path, tag: &str, force: bool) -> Result<Image> {
+        // preparation
         match self.get_image(tag)? {
             None => (),
             Some(image) => {
@@ -150,7 +151,11 @@ impl Dock {
                 }
             }
         }
-        self._build(path, tag)?;
+
+        // actual image building
+        wait_for(self._build_async(path, tag))?;
+
+        // confirm that we actually have the image
         self.get_image(tag)?
             .ok_or_else(|| anyhow!("unable to locate image \"{}\"", tag))
     }
