@@ -12,8 +12,9 @@ log = "*"
 stderrlog = "*"
 # utilities
 anyhow = "*"
-futures-util = "*"
 once_cell = "*"
+# async
+futures-util = "*"
 tokio = "*"
 # docker
 docker-api = "*"
