@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
-use std::io::{Read, Seek};
+use std::io;
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 use anyhow::{bail, Result};
 use bollard::container::{
-    Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+    Config, CreateContainerOptions, ListContainersOptions, LogOutput, LogsOptions,
+    RemoveContainerOptions,
 };
 use bollard::image::{BuildImageOptions, CommitContainerOptions, RemoveImageOptions};
 use bollard::models::HostConfig;
@@ -233,6 +235,37 @@ impl Dock {
 
     /// Run a container
     async fn _exec_async(&mut self, id: &ContainerID) -> Result<bool> {
+        // follow output
+        let opts = LogsOptions {
+            follow: true,
+            stdout: true,
+            stderr: true,
+            ..Default::default()
+        };
+        let mut stream = self.docker.logs::<String>(&id.0, Some(opts));
+        while let Some(frame) = stream.next().await {
+            let frame = frame?;
+            match frame {
+                LogOutput::StdOut { message } => {
+                    io::stdout().write_all(&message)?;
+                }
+                LogOutput::StdErr { message } => {
+                    io::stderr().write_all(&message)?;
+                }
+                LogOutput::StdIn { message } => {
+                    error!(
+                        "unexpected message to stdin: {}",
+                        String::from_utf8(message.to_vec())
+                            .unwrap_or_else(|_| "<not-utf8-string>".to_string())
+                    )
+                }
+                LogOutput::Console { message } => {
+                    io::stdout().write_all(&message)?;
+                }
+            }
+        }
+
+        // wait for termination
         let mut status = None;
         let mut stream = self.docker.wait_container::<String>(&id.0, None);
         while let Some(frame) = stream.next().await {
@@ -256,11 +289,13 @@ impl Dock {
     }
 
     /// Run a container based on an image file
+    #[allow(clippy::too_many_arguments)]
     fn _run(
         &mut self,
         tag: &str,
         name: Option<String>,
         cmd: Vec<String>,
+        net: bool,
         tty: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
@@ -293,7 +328,7 @@ impl Dock {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             tty: Some(tty),
-            network_disabled: Some(true),
+            network_disabled: Some(!net),
             image: Some(image_id.0),
             working_dir: workdir,
             cmd: Some(cmd),
@@ -367,11 +402,14 @@ impl Dock {
     }
 
     /// Run a container based on an image file and commit it back
+    #[allow(clippy::too_many_arguments)]
     pub fn commit(
         &mut self,
         tag: &str,
         name: &str,
         cmd: Vec<String>,
+        net: bool,
+        tty: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
         force: bool,
@@ -391,7 +429,7 @@ impl Dock {
         }
 
         // incremental build
-        let exec_ok = self._run(tag, Some(name.to_string()), cmd, false, binding, workdir)?;
+        let exec_ok = self._run(tag, Some(name.to_string()), cmd, net, tty, binding, workdir)?;
         if !exec_ok {
             bail!("aborting commit due to execution failure");
         }
