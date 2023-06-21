@@ -1,11 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::io::{Read, Seek};
 use std::path::Path;
 
 use anyhow::{bail, Result};
-use bollard::container::{ListContainersOptions, RemoveContainerOptions};
-use bollard::image::{BuildImageOptions, ListImagesOptions, RemoveImageOptions};
+use bollard::container::{
+    Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+};
+use bollard::image::{BuildImageOptions, CommitContainerOptions, RemoveImageOptions};
+use bollard::models::HostConfig;
 use bollard::Docker;
 use futures_util::StreamExt;
 use log::{debug, error, info};
@@ -43,8 +46,7 @@ impl Dock {
         let tag_latest = format!("{}:latest", tag);
 
         let mut candidates = BTreeSet::new();
-        let opts = ListImagesOptions::<String>::default();
-        for image in wait_for(self.docker.list_images(Some(opts)))? {
+        for image in wait_for(self.docker.list_images::<String>(None))? {
             if image.repo_tags.contains(&tag_latest) {
                 candidates.insert(image.id);
             }
@@ -99,6 +101,39 @@ impl Dock {
         wait_for(self.docker.remove_image(&id.0, Some(opts), None))?;
         debug!("[docker] image \"{}\" deleted", id.0);
         Ok(())
+    }
+
+    /// Query a container by its name
+    fn get_container(&self, name: &str) -> Result<Option<ContainerID>> {
+        let mut candidates = BTreeSet::new();
+        let opts = ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        };
+        for container in wait_for(self.docker.list_containers(Some(opts)))? {
+            match container.id {
+                None => (),
+                Some(id) => {
+                    if container
+                        .names
+                        .map_or(false, |names| names.into_iter().any(|n| n == name))
+                    {
+                        candidates.insert(id);
+                    }
+                }
+            }
+        }
+
+        if candidates.len() > 1 {
+            bail!("more than one container with name {}", name);
+        }
+        match candidates.into_iter().next() {
+            None => Ok(None),
+            Some(id) => {
+                debug!("[docker] found container \"{}\" with name \"{}\"", id, name);
+                Ok(Some(ContainerID(id)))
+            }
+        }
     }
 
     /// Delete a container, stop it first if still running
@@ -192,6 +227,141 @@ impl Dock {
             Some(id) => {
                 info!("[docker] image \"{}\" built successfully: {}", tag, id.0);
             }
+        }
+        Ok(())
+    }
+
+    /// Run a container
+    async fn _exec_async(&mut self, id: &ContainerID) -> Result<bool> {
+        let mut status = None;
+        let mut stream = self.docker.wait_container::<String>(&id.0, None);
+        while let Some(frame) = stream.next().await {
+            let frame = frame?;
+            if let Some(msg) = frame.error {
+                error!(
+                    "[docker] {}",
+                    msg.message.unwrap_or_else(|| "<none>".to_string())
+                );
+            }
+            if status.is_none() {
+                status = Some(frame.status_code);
+            } else {
+                bail!("conflicting status code");
+            }
+        }
+        if status.is_none() {
+            bail!("not receiving a status code");
+        }
+        Ok(status.unwrap() == 0)
+    }
+
+    /// Run a container based on an image file
+    fn _run(
+        &mut self,
+        tag: &str,
+        name: Option<String>,
+        cmds: Vec<String>,
+        tty: bool,
+        binding: BTreeMap<&Path, String>,
+        workdir: Option<String>,
+    ) -> Result<bool> {
+        // check container existence
+        let ephemeral_name = format!("{}-ephemeral", tag);
+        if let Some(id) = self.get_container(&ephemeral_name)? {
+            bail!(
+                "docker container \"{}\" already exists with name \"{}\"",
+                id.0,
+                ephemeral_name
+            );
+        }
+
+        // check image existence
+        let image_id = match self.get_image(tag)? {
+            None => {
+                bail!("docker image tagged \"{}\" does not exist", tag);
+            }
+            Some(id) => id,
+        };
+
+        // build the configs
+        let opts = CreateContainerOptions {
+            name: ephemeral_name,
+            ..Default::default()
+        };
+        let cfgs = Config {
+            attach_stdin: Some(false),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            tty: Some(tty),
+            network_disabled: Some(true),
+            image: Some(image_id.0),
+            working_dir: workdir,
+            shell: Some((0..cmds.len()).map(|_| "bash".to_string()).collect()),
+            cmd: Some(cmds),
+            host_config: Some(HostConfig {
+                binds: Some(
+                    binding
+                        .into_iter()
+                        .map(|(h, c)| format!("{}:{}", h.to_str().unwrap(), c))
+                        .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        // create the container
+        let result = wait_for(self.docker.create_container(Some(opts), cfgs))?;
+        if !result.warnings.is_empty() {
+            for msg in result.warnings {
+                error!("{}", msg);
+            }
+            self.del_container(&ContainerID(result.id))?;
+            bail!("unexpected warning in docker container creation");
+        }
+        let container_id = ContainerID(result.id);
+
+        // start the container
+        wait_for(self.docker.start_container::<String>(&container_id.0, None))?;
+
+        // wait for the termination of the container
+        let exec_ok = wait_for(self._exec_async(&container_id))?;
+
+        // decide if we need to commit or remove the container
+        if let Some(commit) = name {
+            if exec_ok {
+                // commit the container
+                wait_for(self.docker.commit_container(
+                    CommitContainerOptions {
+                        container: container_id.0.clone(),
+                        repo: commit,
+                        ..Default::default()
+                    },
+                    Config::<String>::default(),
+                ))?;
+            }
+        }
+
+        // remove the container
+        self.del_container(&container_id)?;
+
+        // return whether the execution is successful or not
+        Ok(exec_ok)
+    }
+
+    /// Run a container based on an image file and commit it back
+    pub fn commit(
+        &mut self,
+        tag: &str,
+        name: &str,
+        cmds: Vec<String>,
+        tty: bool,
+        binding: BTreeMap<&Path, String>,
+        workdir: Option<String>,
+    ) -> Result<()> {
+        let exec_ok = self._run(tag, Some(name.to_string()), cmds, tty, binding, workdir)?;
+        if !exec_ok {
+            bail!("aborting commit due to execution failure");
         }
         Ok(())
     }
