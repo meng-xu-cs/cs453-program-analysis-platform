@@ -33,7 +33,7 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
         false,
         BTreeMap::new(),
         None,
-        true,
+        force,
     )?;
     Ok(())
 }
