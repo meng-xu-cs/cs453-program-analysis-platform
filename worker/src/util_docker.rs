@@ -296,7 +296,7 @@ impl Dock {
             network_disabled: Some(true),
             image: Some(image_id.0),
             working_dir: workdir,
-            shell: Some((0..cmds.len()).map(|_| "bash".to_string()).collect()),
+            shell: Some((0..cmds.len()).map(|_| "/bin/bash".to_string()).collect()),
             cmd: Some(cmds),
             host_config: Some(HostConfig {
                 binds: Some(
@@ -355,14 +355,31 @@ impl Dock {
         tag: &str,
         name: &str,
         cmds: Vec<String>,
-        tty: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
+        force: bool,
     ) -> Result<()> {
-        let exec_ok = self._run(tag, Some(name.to_string()), cmds, tty, binding, workdir)?;
+        // preparation
+        match self.get_image(name)? {
+            None => (),
+            Some(id) => {
+                if force {
+                    info!("[docker] deleting image \"{}\" before building", tag);
+                    self.del_image(&id)?;
+                } else {
+                    info!("[docker] image \"{}\" already exists", tag);
+                    return Ok(());
+                }
+            }
+        }
+
+        // incremental build
+        let exec_ok = self._run(tag, Some(name.to_string()), cmds, false, binding, workdir)?;
         if !exec_ok {
             bail!("aborting commit due to execution failure");
         }
+
+        // done
         Ok(())
     }
 }

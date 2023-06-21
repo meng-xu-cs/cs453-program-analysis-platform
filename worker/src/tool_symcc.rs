@@ -28,9 +28,9 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
             "sudo apt-get update -y".to_string(),
             "sudo apt-get install -y screen".to_string(),
         ],
-        false,
         BTreeMap::new(),
         None,
+        true,
     )?;
     Ok(())
 }
