@@ -24,7 +24,11 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
     dock.commit(
         DOCKER_TAG_BASE,
         DOCKER_TAG,
-        "/usr/bin/bash -c \"sudo apt-get update -y && sudo apt-get install -y screen\"".to_string(),
+        vec![
+            "bash".to_string(),
+            "-c".to_string(),
+            "sudo apt-get update -y && sudo apt-get install -y screen".to_string(),
+        ],
         BTreeMap::new(),
         None,
         true,

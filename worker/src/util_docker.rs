@@ -260,7 +260,7 @@ impl Dock {
         &mut self,
         tag: &str,
         name: Option<String>,
-        cmd: String,
+        cmd: Vec<String>,
         tty: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
@@ -296,7 +296,7 @@ impl Dock {
             network_disabled: Some(true),
             image: Some(image_id.0),
             working_dir: workdir,
-            cmd: Some(vec![cmd]),
+            cmd: Some(cmd),
             host_config: Some(HostConfig {
                 binds: Some(
                     binding
@@ -371,7 +371,7 @@ impl Dock {
         &mut self,
         tag: &str,
         name: &str,
-        cmd: String,
+        cmd: Vec<String>,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
         force: bool,
