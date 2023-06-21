@@ -119,6 +119,7 @@ impl Dock {
         let tx = MemFile::create_default(tag)?;
 
         let mut tarball = Builder::new(tx);
+        tarball.follow_symlinks(false);
         tarball.append_dir_all(".", path)?;
         tarball.finish()?;
         let mut tx = tarball.into_inner()?;
