@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::env;
 use std::future::Future;
 use std::path::Path;
 
@@ -109,12 +110,19 @@ impl Dock {
 
     /// Build an image from a Dockerfile
     async fn _build_async(&mut self, path: &Path, tag: &str) -> Result<()> {
-        let images = self.docker.images();
+        // build options
         let opts = ImageBuildOpts::builder(path)
             .tag(tag)
             .nocahe(true)
             .platform(DEFAULT_PLATFORM)
             .build();
+
+        // need to change directory
+        let cwd = env::current_dir()?;
+        env::set_current_dir(path)?;
+
+        // run the build
+        let images = self.docker.images();
         let mut stream = images.build(&opts);
         while let Some(frame) = stream.next().await {
             let frame = frame?;
@@ -137,7 +145,8 @@ impl Dock {
             }
         }
 
-        // image successfully built
+        // image successfully built, revert the workdir
+        env::set_current_dir(cwd)?;
         Ok(())
     }
 
