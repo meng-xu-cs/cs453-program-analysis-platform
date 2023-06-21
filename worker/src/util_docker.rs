@@ -110,16 +110,16 @@ impl Dock {
 
     /// Build an image from a Dockerfile
     async fn _build_async(&mut self, path: &Path, tag: &str) -> Result<()> {
+        // need to change directory
+        let cwd = env::current_dir()?;
+        env::set_current_dir(path)?;
+
         // build options
-        let opts = ImageBuildOpts::builder(path)
+        let opts = ImageBuildOpts::builder(".")
             .tag(tag)
             .nocahe(true)
             .platform(DEFAULT_PLATFORM)
             .build();
-
-        // need to change directory
-        let cwd = env::current_dir()?;
-        env::set_current_dir(path)?;
 
         // run the build
         let images = self.docker.images();
