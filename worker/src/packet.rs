@@ -7,19 +7,17 @@ use std::{fs, io};
 use anyhow::{bail, Result};
 use sha3::{Digest, Sha3_256};
 
-/// Represents a packet
+/// Uniquely identifies a packet
 pub struct Packet {
-    pub root: PathBuf,
-    num_tests: usize,
-    num_crash: usize,
+    pub hash: String,
 }
 
 impl Packet {
-    /// Build a packet from a filesystem path
-    pub fn new<SRC: AsRef<Path>, DST: AsRef<Path>>(
+    /// Register a packet from a filesystem path
+    pub fn register<SRC: AsRef<Path>, DST: AsRef<Path>>(
         src: SRC,
         dst: DST,
-    ) -> Result<(String, Option<Self>)> {
+    ) -> Result<(Self, bool)> {
         let tmp = src.as_ref().canonicalize()?;
         if !tmp.is_dir() {
             bail!("not a directory");
@@ -103,8 +101,6 @@ impl Packet {
             }
             input_tests.push(item_path);
         }
-
-        let num_tests = input_tests.len();
         for (i, item_path) in input_tests.into_iter().enumerate() {
             // hash the input
             hasher.update(b"input");
@@ -135,8 +131,6 @@ impl Packet {
             }
             input_crash.push(item_path);
         }
-
-        let num_crash = input_crash.len();
         for (i, item_path) in input_crash.into_iter().enumerate() {
             // hash the input
             hasher.update(b"crash");
@@ -154,9 +148,8 @@ impl Packet {
 
         // check for duplication
         let root = dst.as_ref().join(&hash);
-        let pkt = if root.exists() {
-            None
-        } else {
+        let existed = root.exists();
+        if !existed {
             // copy to destination
             copy_dir_recursive(base, &root)?;
 
@@ -167,17 +160,10 @@ impl Packet {
             // create an output directory
             let output = root.join("output");
             fs::create_dir_all(output)?;
-
-            // done with basic sanity checking and preparation
-            Some(Self {
-                root,
-                num_tests,
-                num_crash,
-            })
-        };
+        }
 
         // complete the return package
-        Ok((hash, pkt))
+        Ok((Self { hash }, existed))
     }
 
     /// Prepare the workspace
