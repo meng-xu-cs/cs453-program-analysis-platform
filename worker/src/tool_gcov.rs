@@ -67,8 +67,10 @@ pub fn run_baseline(
     }
 
     // run each tests in input directory
+    let mut input_pass = 0;
+    let mut input_fail = 0;
     for test in docked.path_input_cases.iter() {
-        docker_run(
+        let result = docker_run(
             dock,
             &docked.host_base,
             vec![
@@ -77,9 +79,40 @@ pub fn run_baseline(
                 format!("{} < {}", dock_path_compiled, test),
             ],
         )?;
+        if result {
+            input_pass += 1;
+        } else {
+            input_fail += 1;
+        }
     }
 
-    todo!()
+    let mut crash_pass = 0;
+    let mut crash_fail = 0;
+    for test in docked.path_crash_cases.iter() {
+        let result = docker_run(
+            dock,
+            &docked.host_base,
+            vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                format!("{} < {}", dock_path_compiled, test),
+            ],
+        )?;
+        if result {
+            crash_pass += 1;
+        } else {
+            crash_fail += 1;
+        }
+    }
+
+    // done with baseline testing
+    Ok(ResultBaseline {
+        compiled: true,
+        input_pass,
+        input_fail,
+        crash_pass,
+        crash_fail,
+    })
 }
 
 /// Utility helper on invoking this Docker image
