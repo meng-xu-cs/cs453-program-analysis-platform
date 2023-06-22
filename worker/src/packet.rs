@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::File;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
@@ -12,8 +14,8 @@ pub struct Packet {
     hash: String,
     pub base: PathBuf,
     pub program: PathBuf,
-    pub input_tests: PathBuf,
-    pub input_crash: PathBuf,
+    pub input_tests: BTreeMap<OsString, PathBuf>,
+    pub input_crash: BTreeMap<OsString, PathBuf>,
     output: PathBuf,
 }
 
@@ -54,45 +56,57 @@ impl Packet {
         io::copy(&mut file, &mut hasher)?;
 
         // input tests
-        let input_tests = base.join("input");
-        if !(input_tests.exists() && input_tests.is_dir()) {
+        let mut input_tests = BTreeMap::new();
+        let path_tests = base.join("input");
+        if !(path_tests.exists() && path_tests.is_dir()) {
             bail!("input/ is missing");
         }
-        for item in fs::read_dir(&input_tests)? {
+        for item in fs::read_dir(&path_tests)? {
             let item = item?;
+            let item_name = item.file_name();
             if !item.file_type()?.is_file() {
-                bail!("input/{:?} is invalid", item.file_name());
+                bail!("input/{:?} is invalid", item_name);
             }
             let item_path = item.path();
             let size = item_path.metadata()?.size();
             if size > 1024 {
-                bail!("input/{:?} is too big", item.file_name());
+                bail!("input/{:?} is too big", item_name);
             }
-
+            input_tests
+                .insert(item_name, item_path)
+                .expect("unique file names");
+        }
+        for (item_name, item_path) in &input_tests {
             hasher.update(b"input");
-            hasher.update(item.file_name().as_bytes());
+            hasher.update(item_name.as_bytes());
             let mut file = File::open(item_path)?;
             io::copy(&mut file, &mut hasher)?;
         }
 
         // crash tests
-        let input_crash = base.join("crash");
-        if !(input_crash.exists() && input_crash.is_dir()) {
+        let mut input_crash = BTreeMap::new();
+        let path_tests = base.join("crash");
+        if !(path_tests.exists() && path_tests.is_dir()) {
             bail!("crash/ is missing");
         }
-        for item in fs::read_dir(&input_crash)? {
+        for item in fs::read_dir(&path_tests)? {
             let item = item?;
+            let item_name = item.file_name();
             if !item.file_type()?.is_file() {
-                bail!("crash/{:?} is invalid", item.file_name());
+                bail!("crash/{:?} is invalid", item_name);
             }
             let item_path = item.path();
             let size = item_path.metadata()?.size();
             if size > 1024 {
-                bail!("crash/{:?} is too big", item.file_name());
+                bail!("crash/{:?} is too big", item_name);
             }
-
+            input_crash
+                .insert(item_name, item_path)
+                .expect("unique file names");
+        }
+        for (item_name, item_path) in &input_crash {
             hasher.update(b"crash");
-            hasher.update(item.file_name().as_bytes());
+            hasher.update(item_name.as_bytes());
             let mut file = File::open(item_path)?;
             io::copy(&mut file, &mut hasher)?;
         }
