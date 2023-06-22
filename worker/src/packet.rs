@@ -10,10 +10,10 @@ use sha3::{Digest, Sha3_256};
 /// Represents a packet
 pub struct Packet {
     hash: String,
+    fresh: bool,
     pub root: PathBuf,
-    pub num_tests: usize,
-    pub num_crash: usize,
-    output: PathBuf,
+    num_tests: usize,
+    num_crash: usize,
 }
 
 impl Packet {
@@ -151,32 +151,36 @@ impl Packet {
         let digest = hasher.finalize();
         let hash = hex::encode(digest);
 
-        // copy to destination
+        // check for duplication
         let root = dst.as_ref().join(&hash);
-        copy_dir_recursive(base, &root)?;
+        let fresh = !root.exists();
+        if fresh {
+            // copy to destination
+            copy_dir_recursive(base, &root)?;
 
-        // overwrite the interface file
-        let content = include_bytes!("../asset/interface.h");
-        fs::write(root.join("interface.h"), content)?;
+            // overwrite the interface file
+            let content = include_bytes!("../asset/interface.h");
+            fs::write(root.join("interface.h"), content)?;
 
-        // create output directory
-        let output = root.join("output");
-        fs::create_dir_all(&output)?;
+            // create an output directory
+            let output = root.join("output");
+            fs::create_dir_all(output)?;
+        }
 
         // done with basic sanity checking
         Ok(Self {
             hash,
+            fresh,
             root,
             num_tests,
             num_crash,
-            output,
         })
     }
 
     /// Prepare the workspace
     pub fn mk_docked_wks(&mut self, name: &str, mnt: &str) -> Result<(PathBuf, DockedPacket)> {
         // prepare the host workspace path
-        let host_wks = self.output.join(name);
+        let host_wks = self.root.join("output").join(name);
         if host_wks.exists() {
             if host_wks.is_file() {
                 fs::remove_file(&host_wks)?;
