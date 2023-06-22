@@ -1,12 +1,18 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::{fs, io};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use sha3::{Digest, Sha3_256};
+
+/// Marker for unexpected internal error
+const MAKRER_ERROR: &str = "error";
+
+/// Marker for completed analysis
+const MAKRER_RESULT: &str = "result.json";
 
 /// Uniquely identifies a packet
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -14,17 +20,62 @@ pub struct Packet {
     hash: String,
 }
 
+/// Packet analysis status
+pub enum Status {
+    Received,
+    Queued,
+    Error,
+    Completed,
+}
+
 /// Registry of packets
 pub struct Registry {
     root: RwLock<PathBuf>,
+    packets: RwLock<BTreeMap<Packet, Status>>,
 }
 
 impl Registry {
     /// Create a new registry
-    pub fn new(root: PathBuf) -> Self {
-        Self {
-            root: RwLock::new(root),
+    pub fn new(root: PathBuf) -> Result<Self> {
+        // scan across the root directory
+        if !root.exists() || !root.is_dir() {
+            bail!("invalid root path for registry");
         }
+
+        let mut packets = BTreeMap::new();
+        for item in fs::read_dir(&root)? {
+            let item = item?;
+            let hash = item
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow!("invalid package hash in registry"))?;
+
+            // check packet status
+            let path = item.path();
+            let packet = Packet { hash };
+
+            // on error
+            let path_error = path.join(MAKRER_ERROR);
+            if path_error.exists() {
+                packets.insert(packet, Status::Error);
+                continue;
+            }
+
+            // on completed
+            let path_result = path.join(MAKRER_RESULT);
+            if path_result.exists() {
+                packets.insert(packet, Status::Completed);
+                continue;
+            }
+
+            // on pending
+            packets.insert(packet, Status::Received);
+        }
+
+        Ok(Self {
+            root: RwLock::new(root),
+            packets: RwLock::new(packets),
+        })
     }
 
     /// Register a packet from a filesystem path
@@ -187,6 +238,12 @@ impl Registry {
 
         // complete the return package
         Ok((Packet { hash }, existed))
+    }
+
+    /// Report number of packets received
+    pub fn count(&self) -> usize {
+        let locked = self.packets.read().expect("lock");
+        locked.len()
     }
 
     /// Prepare the workspace

@@ -24,10 +24,10 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     assert!(path.pop());
     path.push("data");
-    fs::create_dir_all(&path).expect("unable to initialize data directory");
+    fs::create_dir_all(&path).expect("unable to initialize the data directory");
 
     // construct the registry
-    Registry::new(path)
+    Registry::new(path).expect("unable to initialize the registry")
 });
 
 /// Port number for the server
@@ -173,6 +173,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .expect("unable to setup logging");
 
     // initialize everything
+    info!("number of packets found: {}", REGISTRY.count());
 
     // bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
