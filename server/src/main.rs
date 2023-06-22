@@ -12,10 +12,11 @@ use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use log::{error, info};
 use once_cell::sync::Lazy;
-use tokio::net::TcpListener;
-
 use tempdir::TempDir;
+use tokio::net::TcpListener;
 use zip::ZipArchive;
+
+use cs453_pap_worker::process::analyze;
 
 /// Absolute path to the `data` directory
 pub static PATH_DATA: Lazy<PathBuf> = Lazy::new(|| {
@@ -131,6 +132,15 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
 
     // act on the request
     info!("processing request: {}", action);
+    match analyze(dir.path(), PATH_DATA.as_path()) {
+        Ok(_) => (),
+        Err(err) => {
+            return Ok(make_sanity_error(&format!(
+                "failed to analyze package: {}",
+                err
+            )));
+        }
+    }
 
     // clean-up
     match dir.close() {
