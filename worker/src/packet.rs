@@ -20,6 +20,13 @@ pub struct Packet {
     hash: String,
 }
 
+impl Packet {
+    /// Get the unique ID for this packet
+    pub fn id(&self) -> &str {
+        &self.hash
+    }
+}
+
 /// Packet analysis status
 pub enum Status {
     Received,
@@ -116,9 +123,11 @@ impl Registry {
                     "main.c" | "interface.h" | "input" | "crash" => (),
                     _ => {
                         if n.starts_with("README") && ty.is_file() {
+                            fs::remove_file(item.path())?;
                             continue;
                         }
                         if n.starts_with("output") && ty.is_dir() {
+                            fs::remove_dir_all(item.path())?;
                             continue;
                         }
                         bail!("unrecognized item: {}", n);

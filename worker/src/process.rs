@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use log::info;
 
 use crate::packet::Registry;
 use crate::tool_gcov::run_baseline;
@@ -20,11 +21,15 @@ pub fn provision(force: bool) -> Result<()> {
 /// Analyze a packet
 pub fn analyze<P: AsRef<Path>>(registry: &Registry, src: P) -> Result<()> {
     let (packet, existed) = registry.register(src)?;
+
+    // shortcut on previously submitted packet
     if existed {
+        info!("packet already exists: {}", packet.id());
         return Ok(());
     }
 
     // analysis
+    info!("scheduling analysis for packet: {}", packet.id());
     let mut dock = Dock::new()?;
     run_baseline(&mut dock, registry, &packet)?;
     Ok(())

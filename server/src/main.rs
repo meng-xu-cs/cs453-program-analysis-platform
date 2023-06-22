@@ -139,6 +139,7 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
     match analyze(&REGISTRY, dir.path()) {
         Ok(_) => (),
         Err(err) => {
+            info!("invalid packet: {}", err);
             return Ok(make_sanity_error(&format!(
                 "failed to analyze package: {}",
                 err
