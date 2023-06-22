@@ -9,8 +9,6 @@ use sha3::{Digest, Sha3_256};
 
 /// Represents a packet
 pub struct Packet {
-    hash: String,
-    fresh: bool,
     pub root: PathBuf,
     num_tests: usize,
     num_crash: usize,
@@ -18,7 +16,10 @@ pub struct Packet {
 
 impl Packet {
     /// Build a packet from a filesystem path
-    pub fn new<SRC: AsRef<Path>, DST: AsRef<Path>>(src: SRC, dst: DST) -> Result<Self> {
+    pub fn new<SRC: AsRef<Path>, DST: AsRef<Path>>(
+        src: SRC,
+        dst: DST,
+    ) -> Result<(String, Option<Self>)> {
         let tmp = src.as_ref().canonicalize()?;
         if !tmp.is_dir() {
             bail!("not a directory");
@@ -153,8 +154,9 @@ impl Packet {
 
         // check for duplication
         let root = dst.as_ref().join(&hash);
-        let fresh = !root.exists();
-        if fresh {
+        let pkt = if root.exists() {
+            None
+        } else {
             // copy to destination
             copy_dir_recursive(base, &root)?;
 
@@ -165,16 +167,17 @@ impl Packet {
             // create an output directory
             let output = root.join("output");
             fs::create_dir_all(output)?;
-        }
 
-        // done with basic sanity checking
-        Ok(Self {
-            hash,
-            fresh,
-            root,
-            num_tests,
-            num_crash,
-        })
+            // done with basic sanity checking and preparation
+            Some(Self {
+                root,
+                num_tests,
+                num_crash,
+            })
+        };
+
+        // complete the return package
+        Ok((hash, pkt))
     }
 
     /// Prepare the workspace

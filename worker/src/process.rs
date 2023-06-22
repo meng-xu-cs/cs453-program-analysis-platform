@@ -18,6 +18,6 @@ pub fn provision(force: bool) -> Result<()> {
 
 /// Analyze a packet
 pub fn analyze<SRC: AsRef<Path>, DST: AsRef<Path>>(src: SRC, dst: DST) -> Result<()> {
-    let pkt = Packet::new(src, dst)?;
+    let (hash, pkt) = Packet::new(src, dst)?;
     Ok(())
 }
