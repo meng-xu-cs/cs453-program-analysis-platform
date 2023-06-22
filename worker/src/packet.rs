@@ -1,7 +1,4 @@
-use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::fs::File;
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -13,9 +10,8 @@ use sha3::{Digest, Sha3_256};
 pub struct Packet {
     hash: String,
     pub base: PathBuf,
-    pub program: PathBuf,
-    pub input_tests: BTreeMap<OsString, PathBuf>,
-    pub input_crash: BTreeMap<OsString, PathBuf>,
+    pub num_tests: usize,
+    pub num_crash: usize,
     output: PathBuf,
 }
 
@@ -41,7 +37,7 @@ impl Packet {
         // hasher
         let mut hasher = Sha3_256::new();
 
-        // code
+        // program
         let program = base.join("main.c");
         if !(program.exists() && program.is_file()) {
             bail!("main.c is missing");
@@ -51,12 +47,12 @@ impl Packet {
             bail!("main.c is too big");
         }
 
-        hasher.update(b"code");
+        hasher.update(b"program");
         let mut file = File::open(&program)?;
         io::copy(&mut file, &mut hasher)?;
 
         // input tests
-        let mut input_tests = BTreeMap::new();
+        let mut input_tests = vec![];
         let path_tests = base.join("input");
         if !(path_tests.exists() && path_tests.is_dir()) {
             bail!("input/ is missing");
@@ -72,19 +68,23 @@ impl Packet {
             if size > 1024 {
                 bail!("input/{:?} is too big", item_name);
             }
-            input_tests
-                .insert(item_name, item_path)
-                .expect("unique file names");
+            input_tests.push(item_path);
         }
-        for (item_name, item_path) in &input_tests {
+
+        let num_tests = input_tests.len();
+        for (i, item_path) in input_tests.into_iter().enumerate() {
+            // hash the input
             hasher.update(b"input");
-            hasher.update(item_name.as_bytes());
-            let mut file = File::open(item_path)?;
+            hasher.update(i.to_ne_bytes());
+            let mut file = File::open(&item_path)?;
             io::copy(&mut file, &mut hasher)?;
+            drop(file);
+            // rename the test file
+            fs::rename(&item_path, item_path.with_file_name(i.to_string()))?;
         }
 
         // crash tests
-        let mut input_crash = BTreeMap::new();
+        let mut input_crash = vec![];
         let path_tests = base.join("crash");
         if !(path_tests.exists() && path_tests.is_dir()) {
             bail!("crash/ is missing");
@@ -100,15 +100,19 @@ impl Packet {
             if size > 1024 {
                 bail!("crash/{:?} is too big", item_name);
             }
-            input_crash
-                .insert(item_name, item_path)
-                .expect("unique file names");
+            input_crash.push(item_path);
         }
-        for (item_name, item_path) in &input_crash {
+
+        let num_crash = input_crash.len();
+        for (i, item_path) in input_crash.into_iter().enumerate() {
+            // hash the input
             hasher.update(b"crash");
-            hasher.update(item_name.as_bytes());
-            let mut file = File::open(item_path)?;
+            hasher.update(i.to_ne_bytes());
+            let mut file = File::open(&item_path)?;
             io::copy(&mut file, &mut hasher)?;
+            drop(file);
+            // rename the test file
+            fs::rename(&item_path, item_path.with_file_name(i.to_string()))?;
         }
 
         // derive the hash
@@ -127,9 +131,8 @@ impl Packet {
         Ok(Self {
             hash,
             base,
-            program,
-            input_tests,
-            input_crash,
+            num_tests,
+            num_crash,
             output,
         })
     }

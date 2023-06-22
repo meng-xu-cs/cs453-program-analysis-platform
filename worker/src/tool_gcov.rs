@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -9,6 +9,9 @@ use crate::util_docker::Dock;
 
 /// Tag of the Docker image
 const DOCKER_TAG: &str = "gcov";
+
+/// Default mount point for work directory
+const DOCKER_MNT: &str = "/test";
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
@@ -34,7 +37,8 @@ pub struct ResultBaseline {
 
 /// Run user-provided test cases
 pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseline> {
-    let wks = packet.mk_wks("base")?;
+    let host_wks = packet.mk_wks("base")?;
+    let dock_wks = Path::new(DOCKER_MNT).join("output").join("base");
 
     // build the program
     // docker_run(dock, packet)
@@ -44,15 +48,14 @@ pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseli
 
 /// Utility helper on invoking this Docker image
 fn docker_run(dock: &mut Dock, packet: &mut Packet, cmd: Vec<String>) -> Result<bool> {
-    let workdir = "/test";
     let mut binding = BTreeMap::new();
-    binding.insert(packet.base.as_path(), workdir.to_string());
+    binding.insert(packet.base.as_path(), DOCKER_MNT.to_string());
     dock.invoke(
         DOCKER_TAG,
         cmd,
         false,
         false,
         binding,
-        Some(workdir.to_string()),
+        Some(DOCKER_MNT.to_string()),
     )
 }
