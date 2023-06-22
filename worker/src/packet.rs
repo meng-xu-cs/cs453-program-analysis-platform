@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -138,16 +139,66 @@ impl Packet {
     }
 
     /// Prepare the workspace
-    pub fn mk_wks(&mut self, name: &str) -> Result<PathBuf> {
-        let path = self.output.join(name);
-        if path.exists() {
-            if path.is_file() {
-                fs::remove_file(&path)?;
+    pub fn mk_docked_wks(&mut self, name: &str, mnt: &str) -> Result<(PathBuf, DockedPacket)> {
+        // prepare the host workspace path
+        let host_wks = self.output.join(name);
+        if host_wks.exists() {
+            if host_wks.is_file() {
+                fs::remove_file(&host_wks)?;
             } else {
-                fs::remove_dir_all(&path)?;
+                fs::remove_dir_all(&host_wks)?;
             }
         }
-        fs::create_dir(&path)?;
-        Ok(path)
+        fs::create_dir(&host_wks)?;
+
+        // prepare the dockerized packet
+        let dock_base = Path::new(mnt);
+        let dock_packet = DockedPacket {
+            path_base: mnt.to_string(),
+            path_program: path_to_str1(dock_base, "main.c"),
+            path_input: path_to_str1(dock_base, "input"),
+            path_input_cases: (0..self.num_tests)
+                .map(|i| path_to_str2(dock_base, "input", &i.to_string()))
+                .collect(),
+            path_crash: path_to_str1(dock_base, "crash"),
+            path_crash_cases: (0..self.num_crash)
+                .map(|i| path_to_str2(dock_base, "crash", &i.to_string()))
+                .collect(),
+            path_output: path_to_str2(dock_base, "output", name),
+        };
+
+        // done with the construction
+        Ok((host_wks, dock_packet))
     }
+}
+
+/// Dockerized packet
+pub struct DockedPacket {
+    pub path_base: String,
+    pub path_program: String,
+    pub path_input: String,
+    pub path_input_cases: BTreeSet<String>,
+    pub path_crash: String,
+    pub path_crash_cases: BTreeSet<String>,
+    pub path_output: String,
+}
+
+impl DockedPacket {
+    /// Derive a workspace path
+    pub fn wks_path(&self, seg: &str) -> String {
+        path_to_str1(Path::new(&self.path_output), seg)
+    }
+}
+
+// Utilitiy function to convert paths
+fn path_to_str1(base: &Path, seg: &str) -> String {
+    base.join(seg).into_os_string().into_string().unwrap()
+}
+
+fn path_to_str2(base: &Path, seg1: &str, seg2: &str) -> String {
+    base.join(seg1)
+        .join(seg2)
+        .into_os_string()
+        .into_string()
+        .unwrap()
 }

@@ -37,11 +37,19 @@ pub struct ResultBaseline {
 
 /// Run user-provided test cases
 pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseline> {
-    let host_wks = packet.mk_wks("base")?;
-    let dock_wks = Path::new(DOCKER_MNT).join("output").join("base");
+    let (host_wks, dock_packet) = packet.mk_docked_wks("base", DOCKER_MNT)?;
 
     // build the program
-    // docker_run(dock, packet)
+    docker_run(
+        dock,
+        packet,
+        vec![
+            "gcc".to_string(),
+            dock_packet.path_program.clone(),
+            "-o".to_string(),
+            dock_packet.wks_path("main"),
+        ],
+    )?;
 
     todo!()
 }
@@ -50,12 +58,5 @@ pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseli
 fn docker_run(dock: &mut Dock, packet: &mut Packet, cmd: Vec<String>) -> Result<bool> {
     let mut binding = BTreeMap::new();
     binding.insert(packet.base.as_path(), DOCKER_MNT.to_string());
-    dock.invoke(
-        DOCKER_TAG,
-        cmd,
-        false,
-        false,
-        binding,
-        Some(DOCKER_MNT.to_string()),
-    )
+    dock.invoke(DOCKER_TAG, cmd, false, false, binding, None)
 }
