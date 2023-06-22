@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use anyhow::Result;
 
+use crate::packet::Packet;
 use crate::util_docker::Dock;
 use crate::{tool_aflpp, tool_gcov, tool_klee, tool_symcc};
 
@@ -10,5 +13,11 @@ pub fn provision(force: bool) -> Result<()> {
     tool_aflpp::provision(&mut dock, force)?;
     tool_klee::provision(&mut dock, force)?;
     tool_symcc::provision(&mut dock, force)?;
+    Ok(())
+}
+
+/// Analyze a packet
+pub fn analyze<SRC: AsRef<Path>, DST: AsRef<Path>>(src: SRC, dst: DST) -> Result<()> {
+    let pkt = Packet::new(src, dst)?;
     Ok(())
 }
