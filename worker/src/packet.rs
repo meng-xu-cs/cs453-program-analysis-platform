@@ -19,19 +19,50 @@ pub struct Packet {
 impl Packet {
     /// Build a packet from a filesystem path
     pub fn new<SRC: AsRef<Path>, DST: AsRef<Path>>(src: SRC, dst: DST) -> Result<Self> {
-        let base = src.as_ref().canonicalize()?;
-        if !base.is_dir() {
+        let tmp = src.as_ref().canonicalize()?;
+        if !tmp.is_dir() {
             bail!("not a directory");
         }
 
+        // probe packet base
+        let mut probe = None;
+        let mut count = 0;
+        for item in fs::read_dir(&tmp)? {
+            let item = item?;
+            count += 1;
+            if count == 2 {
+                break;
+            }
+
+            let ty = item.file_type()?;
+            if ty.is_dir() {
+                probe = Some(item.path());
+            }
+        }
+        let base = match (probe, count) {
+            (Some(p), 1) => p,
+            _ => tmp,
+        };
+
         // scan for directory content
         for item in fs::read_dir(&base)? {
-            let name = item?.file_name();
+            let item = item?;
+            let name = item.file_name();
+            let ty = item.file_type()?;
             match name.to_str() {
-                Some("main.c") | Some("interface.h") | Some("input") | Some("crash")
-                | Some("README") | Some("README.md") | Some("README.txt") | Some("README.pdf") => {}
-                Some(n) => bail!("unrecognized item: {}", n),
                 None => bail!("unrecognized item: {:?}", name),
+                Some(n) => match n {
+                    "main.c" | "interface.h" | "input" | "crash" => (),
+                    _ => {
+                        if n.starts_with("README") && ty.is_file() {
+                            continue;
+                        }
+                        if n.starts_with("output") && ty.is_dir() {
+                            continue;
+                        }
+                        bail!("unrecognized item: {}", n);
+                    }
+                },
             }
         }
 

@@ -84,7 +84,7 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
         "/trial" => Action::Trial,
         "/submit" => Action::Submit,
         _ => {
-            return Ok(make_sanity_error("invalid request"));
+            return Ok(make_sanity_error("invalid URI path"));
         }
     };
 
@@ -174,6 +174,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
     let listener = TcpListener::bind(addr).await?;
+    info!("server started");
 
     // start server
     loop {
