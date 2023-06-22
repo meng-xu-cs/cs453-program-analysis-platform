@@ -1,19 +1,14 @@
-use std::convert::Infallible;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::{fs, io};
+use std::sync::Arc;
+use std::{fs, thread};
 
-use http_body_util::{BodyExt, Full};
-use hyper::body::{Bytes, Incoming};
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response, StatusCode};
 use log::{error, info};
 use once_cell::sync::Lazy;
 use tempdir::TempDir;
-use tokio::net::TcpListener;
+use tiny_http::{Method, Request, Response};
 use zip::ZipArchive;
 
 use cs453_pap_worker::packet::Registry;
@@ -31,30 +26,24 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
 });
 
 /// Port number for the server
-pub const PORT: u16 = 8000;
+const PORT: u16 = 8000;
+
+/// Number of server instances
+const NUMBER_OF_SERVERS: usize = 4;
 
 /// Produce an error response related to user making a bad request
-fn make_sanity_error(reason: &str) -> Response<Full<Bytes>> {
-    let mut r = Response::new(Full::new(Bytes::from(format!("[error] {}", reason))));
-    *r.status_mut() = StatusCode::BAD_REQUEST;
-    r
+fn make_sanity_error<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
+    Response::from_string(format!("[error] {}", reason.as_ref())).with_status_code(400)
 }
 
 /// Produce an error response related to server internal status
-fn make_server_error(reason: &str) -> Response<Full<Bytes>> {
-    let mut r = Response::new(Full::new(Bytes::from(format!(
-        "[internal error] {}",
-        reason
-    ))));
-    *r.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-    r
+fn make_server_error<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
+    Response::from_string(format!("[internal error] {}", reason.as_ref())).with_status_code(500)
 }
 
 /// Produce a normal reply
-fn make_ok(message: &str) -> Response<Full<Bytes>> {
-    let mut r = Response::new(Full::new(Bytes::from(format!("{}\n", message))));
-    *r.status_mut() = StatusCode::OK;
-    r
+fn make_ok<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
+    Response::from_string(format!("{}\n", reason.as_ref())).with_status_code(200)
 }
 
 /// Allowed actions
@@ -73,44 +62,42 @@ impl Display for Action {
 }
 
 /// Entrypoint of the execution
-async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
     // shortcut for help
-    if req.method() != "POST" {
-        return Ok(make_sanity_error("only POST request allowed"));
+    match req.method() {
+        Method::Post => (),
+        _ => {
+            return make_sanity_error("invalid method");
+        }
     }
 
     // parse command
-    let uri = req.uri();
-    if uri.query().is_some() {
-        return Ok(make_sanity_error("queries not allowed in URI path"));
-    }
-    let action = match uri.path() {
+    let url = req.url();
+    let action = match url {
         "/trial" => Action::Trial,
         "/submit" => Action::Submit,
         _ => {
-            return Ok(make_sanity_error("invalid URI path"));
+            return make_sanity_error("invalid URI path");
         }
     };
 
     // parse body
-    let body = match req.into_body().collect().await {
-        Ok(collected) => collected.to_bytes(),
+    let mut body = vec![];
+    match req.as_reader().read_to_end(&mut body) {
+        Ok(_) => (),
         Err(err) => {
-            return Ok(make_sanity_error(&format!(
-                "unable to read POST body: {}",
-                err
-            )));
+            return make_sanity_error(format!("unable to read POST body: {}", err));
         }
-    };
+    }
 
-    let mut reader = io::Cursor::new(body);
+    let mut reader = Cursor::new(body);
     let mut zip = match ZipArchive::new(&mut reader) {
         Ok(ar) => ar,
         Err(err) => {
-            return Ok(make_sanity_error(&format!(
+            return make_sanity_error(format!(
                 "unable to parse POST body into a ZIP archive: {}",
                 err
-            )));
+            ));
         }
     };
 
@@ -118,19 +105,16 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
     let dir = match TempDir::new("pap") {
         Ok(d) => d,
         Err(err) => {
-            return Ok(make_server_error(&format!(
-                "unable to create temporary directory: {}",
-                err
-            )));
+            return make_server_error(format!("unable to create temporary directory: {}", err));
         }
     };
     match zip.extract(dir.path()) {
         Ok(_) => (),
         Err(err) => {
-            return Ok(make_server_error(&format!(
+            return make_server_error(format!(
                 "unable to extract the ZIP archive into the temporary directory: {}",
                 err
-            )));
+            ));
         }
     }
 
@@ -140,10 +124,7 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
         Ok(_) => (),
         Err(err) => {
             info!("invalid packet: {}", err);
-            return Ok(make_sanity_error(&format!(
-                "failed to analyze package: {}",
-                err
-            )));
+            return make_sanity_error(format!("failed to analyze package: {}", err));
         }
     }
 
@@ -151,20 +132,15 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
     match dir.close() {
         Ok(_) => (),
         Err(err) => {
-            return Ok(make_server_error(&format!(
-                "unable to clean-up the temporary directory: {}",
-                err
-            )));
+            return make_server_error(format!("unable to clear the temporary directory: {}", err));
         }
     }
 
-    let response = make_ok("everything is good");
-    Ok(response)
+    make_ok("everything is good")
 }
 
 /// Start server
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+fn main() {
     // setup logging
     stderrlog::new()
         .module(module_path!())
@@ -178,20 +154,52 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
-    let listener = TcpListener::bind(addr).await?;
-    info!("server started");
+    let server = tiny_http::Server::http(addr).expect("server binding");
+    info!("socket bounded");
 
-    // start server
-    loop {
-        let (stream, _) = listener.accept().await?;
-        // Spawn a tokio task to serve multiple connections concurrently
-        tokio::task::spawn(async move {
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(stream, service_fn(entrypoint))
-                .await
-            {
-                error!("Error serving connection: {:?}", err);
+    let pointer = Arc::new(server);
+    let mut handles = Vec::with_capacity(NUMBER_OF_SERVERS);
+    for i in 0..NUMBER_OF_SERVERS {
+        let instance = Arc::clone(&pointer);
+        let handle = thread::spawn(move || loop {
+            // wait for request
+            let mut request = match instance.recv() {
+                Ok(req) => req,
+                Err(err) => {
+                    error!(
+                        "[instance {}] unexpected error when receiving requests: {}",
+                        i, err
+                    );
+                    continue;
+                }
+            };
+
+            // process it
+            let response = entrypoint(&mut request);
+
+            // send back response
+            match request.respond(response) {
+                Ok(_) => (),
+                Err(err) => {
+                    error!(
+                        "[instance {}] unexpected error when sending response: {}",
+                        i, err
+                    );
+                }
             }
         });
+        handles.push(handle);
+    }
+
+    // wait for termination
+    for (i, h) in handles.into_iter().enumerate() {
+        match h.join() {
+            Ok(_) => {
+                info!("[instance {}] terminated", i);
+            }
+            Err(err) => {
+                error!("[instance {}] unexpected error on join: {:?}", i, err);
+            }
+        }
     }
 }
