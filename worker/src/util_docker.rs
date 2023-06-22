@@ -437,4 +437,18 @@ impl Dock {
         // done
         Ok(())
     }
+
+    /// Invoke a simple command on a container and discard it
+    #[allow(clippy::too_many_arguments)]
+    pub fn invoke(
+        &mut self,
+        tag: &str,
+        cmd: Vec<String>,
+        net: bool,
+        tty: bool,
+        binding: BTreeMap<&Path, String>,
+        workdir: Option<String>,
+    ) -> Result<bool> {
+        self._run(tag, None, cmd, net, tty, binding, workdir)
+    }
 }

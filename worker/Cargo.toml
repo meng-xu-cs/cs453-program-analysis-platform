@@ -20,3 +20,6 @@ tokio = "*"
 memfile = "*"
 tar = "*"
 bollard = "*"
+# hashing
+hex = "*"
+sha3 = "*"
