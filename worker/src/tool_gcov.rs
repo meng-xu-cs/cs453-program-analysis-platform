@@ -29,6 +29,7 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
 
 /// Result for baseline evaluation
 pub struct ResultBaseline {
+    pub compiled: bool,
     pub input_pass: usize,
     pub input_fail: usize,
     pub crash_pass: usize,
@@ -43,17 +44,40 @@ pub fn run_baseline(
 ) -> Result<ResultBaseline> {
     let docked = registry.mk_dockerized_packet(packet, "baseline", DOCKER_MNT)?;
 
-    // build the program
-    docker_run(
+    // compile the program
+    let dock_path_compiled = docked.wks_path("main");
+    let result = docker_run(
         dock,
         &docked.host_base,
         vec![
             "gcc".to_string(),
             docked.path_program.clone(),
             "-o".to_string(),
-            docked.wks_path("main"),
+            dock_path_compiled.clone(),
         ],
     )?;
+    if !result {
+        return Ok(ResultBaseline {
+            compiled: false,
+            input_pass: 0,
+            input_fail: 0,
+            crash_pass: 0,
+            crash_fail: 0,
+        });
+    }
+
+    // run each tests in input directory
+    for test in docked.path_input_cases.iter() {
+        docker_run(
+            dock,
+            &docked.host_base,
+            vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                format!("{} < {}", dock_path_compiled, test),
+            ],
+        )?;
+    }
 
     todo!()
 }
