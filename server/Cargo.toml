@@ -22,3 +22,5 @@ stderrlog = "*"
 # utilities
 anyhow = "*"
 once_cell = "*"
+# worker
+cs453-pap-worker = { path = "../worker" }

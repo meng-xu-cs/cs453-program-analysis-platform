@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -57,6 +57,6 @@ pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseli
 /// Utility helper on invoking this Docker image
 fn docker_run(dock: &mut Dock, packet: &mut Packet, cmd: Vec<String>) -> Result<bool> {
     let mut binding = BTreeMap::new();
-    binding.insert(packet.base.as_path(), DOCKER_MNT.to_string());
+    binding.insert(packet.root.as_path(), DOCKER_MNT.to_string());
     dock.invoke(DOCKER_TAG, cmd, false, false, binding, None)
 }

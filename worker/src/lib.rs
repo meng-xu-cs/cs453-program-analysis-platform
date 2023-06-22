@@ -1,9 +1,9 @@
-pub mod util_docker;
+pub(crate) mod util_docker;
 
-pub mod tool_aflpp;
-pub mod tool_gcov;
-pub mod tool_klee;
-pub mod tool_symcc;
+pub(crate) mod tool_aflpp;
+pub(crate) mod tool_gcov;
+pub(crate) mod tool_klee;
+pub(crate) mod tool_symcc;
 pub mod tools;
 
-pub mod packet;
+pub(crate) mod packet;

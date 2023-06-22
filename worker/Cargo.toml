@@ -16,9 +16,10 @@ once_cell = "*"
 # async
 futures-util = "*"
 tokio = "*"
-# docker
+# filesystem
 memfile = "*"
 tar = "*"
+# docker
 bollard = "*"
 # hashing
 hex = "*"

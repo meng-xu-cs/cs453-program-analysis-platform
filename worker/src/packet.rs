@@ -10,7 +10,7 @@ use sha3::{Digest, Sha3_256};
 /// Represents a packet
 pub struct Packet {
     hash: String,
-    pub base: PathBuf,
+    pub root: PathBuf,
     pub num_tests: usize,
     pub num_crash: usize,
     output: PathBuf,
@@ -18,8 +18,8 @@ pub struct Packet {
 
 impl Packet {
     /// Build a packet from a filesystem path
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let base = path.as_ref().canonicalize()?;
+    pub fn new<SRC: AsRef<Path>, DST: AsRef<Path>>(src: SRC, dst: DST) -> Result<Self> {
+        let base = src.as_ref().canonicalize()?;
         if !base.is_dir() {
             bail!("not a directory");
         }
@@ -120,18 +120,22 @@ impl Packet {
         let digest = hasher.finalize();
         let hash = hex::encode(digest);
 
+        // copy to destination
+        let root = dst.as_ref().join(&hash);
+        copy_dir_recursive(base, &root)?;
+
         // overwrite the interface file
         let content = include_bytes!("../asset/interface.h");
-        fs::write(base.join("interface.h"), content)?;
+        fs::write(root.join("interface.h"), content)?;
 
         // create output directory
-        let output = base.join("output");
+        let output = root.join("output");
         fs::create_dir_all(&output)?;
 
         // done with basic sanity checking
         Ok(Self {
             hash,
-            base,
+            root,
             num_tests,
             num_crash,
             output,
@@ -190,7 +194,8 @@ impl DockedPacket {
     }
 }
 
-// Utilitiy function to convert paths
+// Utilities functions
+
 fn path_to_str1(base: &Path, seg: &str) -> String {
     base.join(seg).into_os_string().into_string().unwrap()
 }
@@ -201,4 +206,18 @@ fn path_to_str2(base: &Path, seg1: &str, seg2: &str) -> String {
         .into_os_string()
         .into_string()
         .unwrap()
+}
+
+fn copy_dir_recursive(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_recursive(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
