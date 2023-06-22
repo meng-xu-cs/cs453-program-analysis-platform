@@ -124,7 +124,7 @@ fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
         Ok(_) => (),
         Err(err) => {
             info!("invalid packet: {}", err);
-            return make_sanity_error(format!("failed to analyze package: {}", err));
+            return make_sanity_error(format!("failed to schedule analysis: {}", err));
         }
     }
 
