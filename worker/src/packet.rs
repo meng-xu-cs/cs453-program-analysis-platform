@@ -2,22 +2,33 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use std::{fs, io};
 
 use anyhow::{bail, Result};
 use sha3::{Digest, Sha3_256};
 
 /// Uniquely identifies a packet
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Packet {
-    pub hash: String,
+    hash: String,
 }
 
-impl Packet {
+/// Registry of packets
+pub struct Registry {
+    root: RwLock<PathBuf>,
+}
+
+impl Registry {
+    /// Create a new registry
+    pub fn new(root: PathBuf) -> Self {
+        Self {
+            root: RwLock::new(root),
+        }
+    }
+
     /// Register a packet from a filesystem path
-    pub fn register<SRC: AsRef<Path>, DST: AsRef<Path>>(
-        src: SRC,
-        dst: DST,
-    ) -> Result<(Self, bool)> {
+    pub fn register<P: AsRef<Path>>(&self, src: P) -> Result<(Packet, bool)> {
         let tmp = src.as_ref().canonicalize()?;
         if !tmp.is_dir() {
             bail!("not a directory");
@@ -146,9 +157,21 @@ impl Packet {
         let digest = hasher.finalize();
         let hash = hex::encode(digest);
 
-        // check for duplication
-        let root = dst.as_ref().join(&hash);
+        // check for duplication atomically
+        let locked = self.root.write().expect("lock");
+        let root = locked.join(&hash);
         let existed = root.exists();
+        let err_opt = if existed {
+            None
+        } else {
+            fs::create_dir_all(&root).err()
+        };
+        drop(locked);
+        if let Some(err) = err_opt {
+            bail!(err);
+        }
+
+        // prepare the packet in registry
         if !existed {
             // copy to destination
             copy_dir_recursive(base, &root)?;
@@ -163,45 +186,71 @@ impl Packet {
         }
 
         // complete the return package
-        Ok((Self { hash }, existed))
+        Ok((Packet { hash }, existed))
     }
 
     /// Prepare the workspace
-    pub fn mk_docked_wks(&mut self, name: &str, mnt: &str) -> Result<(PathBuf, DockedPacket)> {
+    pub fn mk_dockerized_packet(
+        &self,
+        pkt: &Packet,
+        name: &str,
+        mnt: &str,
+    ) -> Result<DockedPacket> {
+        let locked = self.root.read().expect("lock");
+        let host_base = locked.join(&pkt.hash);
+        drop(locked);
+
         // prepare the host workspace path
-        let host_wks = self.root.join("output").join(name);
-        if host_wks.exists() {
-            if host_wks.is_file() {
-                fs::remove_file(&host_wks)?;
+        let host_output = host_base.join("output").join(name);
+        if host_output.exists() {
+            if host_output.is_file() {
+                fs::remove_file(&host_output)?;
             } else {
-                fs::remove_dir_all(&host_wks)?;
+                fs::remove_dir_all(&host_output)?;
             }
         }
-        fs::create_dir(&host_wks)?;
+        fs::create_dir(&host_output)?;
 
         // prepare the dockerized packet
         let dock_base = Path::new(mnt);
+
+        let host_input = host_base.join("input");
+        let dock_input = dock_base.join("input");
+        let mut dock_input_cases = BTreeSet::new();
+        for item in fs::read_dir(host_input)? {
+            let item = item?;
+            dock_input_cases.insert(path_to_str(dock_input.join(item.file_name())));
+        }
+
+        let host_crash = host_base.join("crash");
+        let dock_crash = dock_base.join("crash");
+        let mut dock_crash_cases = BTreeSet::new();
+        for item in fs::read_dir(host_crash)? {
+            let item = item?;
+            dock_crash_cases.insert(path_to_str(dock_input.join(item.file_name())));
+        }
+
         let dock_packet = DockedPacket {
+            host_base,
+            host_output,
             path_base: mnt.to_string(),
-            path_program: path_to_str1(dock_base, "main.c"),
-            path_input: path_to_str1(dock_base, "input"),
-            path_input_cases: (0..self.num_tests)
-                .map(|i| path_to_str2(dock_base, "input", &i.to_string()))
-                .collect(),
-            path_crash: path_to_str1(dock_base, "crash"),
-            path_crash_cases: (0..self.num_crash)
-                .map(|i| path_to_str2(dock_base, "crash", &i.to_string()))
-                .collect(),
-            path_output: path_to_str2(dock_base, "output", name),
+            path_program: path_to_str(dock_base.join("main.c")),
+            path_input: path_to_str(dock_input),
+            path_input_cases: dock_input_cases,
+            path_crash: path_to_str(dock_crash),
+            path_crash_cases: dock_crash_cases,
+            path_output: path_to_str(dock_base.join("output").join(name)),
         };
 
         // done with the construction
-        Ok((host_wks, dock_packet))
+        Ok(dock_packet)
     }
 }
 
 /// Dockerized packet
 pub struct DockedPacket {
+    pub host_base: PathBuf,
+    pub host_output: PathBuf,
     pub path_base: String,
     pub path_program: String,
     pub path_input: String,
@@ -214,22 +263,14 @@ pub struct DockedPacket {
 impl DockedPacket {
     /// Derive a workspace path
     pub fn wks_path(&self, seg: &str) -> String {
-        path_to_str1(Path::new(&self.path_output), seg)
+        path_to_str(Path::new(&self.path_output).join(seg))
     }
 }
 
 // Utilities functions
 
-fn path_to_str1(base: &Path, seg: &str) -> String {
-    base.join(seg).into_os_string().into_string().unwrap()
-}
-
-fn path_to_str2(base: &Path, seg1: &str, seg2: &str) -> String {
-    base.join(seg1)
-        .join(seg2)
-        .into_os_string()
-        .into_string()
-        .unwrap()
+fn path_to_str(path: PathBuf) -> String {
+    path.into_os_string().into_string().expect("ascii path")
 }
 
 fn copy_dir_recursive(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {

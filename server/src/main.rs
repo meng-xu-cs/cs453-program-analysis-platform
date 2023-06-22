@@ -16,14 +16,18 @@ use tempdir::TempDir;
 use tokio::net::TcpListener;
 use zip::ZipArchive;
 
+use cs453_pap_worker::packet::Registry;
 use cs453_pap_worker::process::analyze;
 
 /// Absolute path to the `data` directory
-pub static PATH_DATA: Lazy<PathBuf> = Lazy::new(|| {
+static REGISTRY: Lazy<Registry> = Lazy::new(|| {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     assert!(path.pop());
     path.push("data");
-    path
+    fs::create_dir_all(&path).expect("unable to initialize data directory");
+
+    // construct the registry
+    Registry::new(path)
 });
 
 /// Port number for the server
@@ -132,7 +136,7 @@ async fn entrypoint(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Inf
 
     // act on the request
     info!("processing request: {}", action);
-    match analyze(dir.path(), PATH_DATA.as_path()) {
+    match analyze(&REGISTRY, dir.path()) {
         Ok(_) => (),
         Err(err) => {
             return Ok(make_sanity_error(&format!(
@@ -169,7 +173,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .expect("unable to setup logging");
 
     // initialize everything
-    fs::create_dir_all(PATH_DATA.join("worker")).expect("unable to initialize data directory");
 
     // bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));

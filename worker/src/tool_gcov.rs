@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
 
-use crate::packet::Packet;
+use crate::packet::{Packet, Registry};
 use crate::util_docker::Dock;
 
 /// Tag of the Docker image
@@ -36,18 +36,22 @@ pub struct ResultBaseline {
 }
 
 /// Run user-provided test cases
-pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseline> {
-    let (host_wks, dock_packet) = packet.mk_docked_wks("base", DOCKER_MNT)?;
+pub fn run_baseline(
+    dock: &mut Dock,
+    registry: &Registry,
+    packet: &Packet,
+) -> Result<ResultBaseline> {
+    let docked = registry.mk_dockerized_packet(packet, "baseline", DOCKER_MNT)?;
 
     // build the program
     docker_run(
         dock,
-        packet,
+        &docked.host_base,
         vec![
             "gcc".to_string(),
-            dock_packet.path_program.clone(),
+            docked.path_program.clone(),
             "-o".to_string(),
-            dock_packet.wks_path("main"),
+            docked.wks_path("main"),
         ],
     )?;
 
@@ -55,8 +59,8 @@ pub fn run_baseline(dock: &mut Dock, packet: &mut Packet) -> Result<ResultBaseli
 }
 
 /// Utility helper on invoking this Docker image
-fn docker_run(dock: &mut Dock, packet: &mut Packet, cmd: Vec<String>) -> Result<bool> {
+fn docker_run(dock: &mut Dock, base: &Path, cmd: Vec<String>) -> Result<bool> {
     let mut binding = BTreeMap::new();
-    binding.insert(packet.root.as_path(), DOCKER_MNT.to_string());
+    binding.insert(base, DOCKER_MNT.to_string());
     dock.invoke(DOCKER_TAG, cmd, false, false, binding, None)
 }
