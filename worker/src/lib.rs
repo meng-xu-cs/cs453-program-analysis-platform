@@ -4,6 +4,7 @@ pub(crate) mod tool_aflpp;
 pub(crate) mod tool_gcov;
 pub(crate) mod tool_klee;
 pub(crate) mod tool_symcc;
-pub mod tools;
 
 pub(crate) mod packet;
+
+pub mod process;

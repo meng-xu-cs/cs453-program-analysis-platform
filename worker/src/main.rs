@@ -1,6 +1,6 @@
 use log::error;
 
-use cs453_pap_worker::tools;
+use cs453_pap_worker::process;
 
 fn main() {
     // setup logging
@@ -12,7 +12,7 @@ fn main() {
         .expect("unable to setup logging");
 
     // handle the command line
-    match tools::provision(false) {
+    match process::provision(false) {
         Ok(()) => (),
         Err(err) => {
             error!("failed to provision tools: {}", err);
