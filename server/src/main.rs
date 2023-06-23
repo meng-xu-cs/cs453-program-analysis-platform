@@ -1,18 +1,18 @@
-use std::fmt::{Display, Formatter};
 use std::io::Cursor;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fs, thread};
 
+use crossbeam_channel::Sender;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use tempdir::TempDir;
 use tiny_http::{Method, Request, Response};
 use zip::ZipArchive;
 
-use cs453_pap_worker::packet::Registry;
-use cs453_pap_worker::process::schedule;
+use cs453_pap_worker::packet::{Packet, Registry};
+use cs453_pap_worker::process::analyze;
 
 /// Absolute path to the `data` directory
 static REGISTRY: Lazy<Registry> = Lazy::new(|| {
@@ -32,7 +32,10 @@ const HOST: &str = "localhost";
 const PORT: u16 = 8000;
 
 /// Number of server instances
-const NUMBER_OF_SERVERS: usize = 4;
+const NUMBER_OF_SERVERS: usize = 2;
+
+/// Number of worker instances
+const NUMBER_OF_WORKERS: usize = 8;
 
 /// Produce an error response related to user making a bad request
 fn make_sanity_error<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
@@ -49,23 +52,8 @@ fn make_ok<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
     Response::from_string(format!("{}\n", reason.as_ref())).with_status_code(200)
 }
 
-/// Allowed actions
-enum Action {
-    Trial,
-    Submit,
-}
-
-impl Display for Action {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Trial => write!(f, "trial"),
-            Self::Submit => write!(f, "submit"),
-        }
-    }
-}
-
 /// Entrypoint of the execution
-fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
+fn entrypoint(req: &mut Request, channel: &Sender<Packet>) -> Response<Cursor<Vec<u8>>> {
     // shortcut for help
     match req.method() {
         Method::Post => (),
@@ -75,14 +63,9 @@ fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
     }
 
     // parse command
-    let url = req.url();
-    let action = match url {
-        "/trial" => Action::Trial,
-        "/submit" => Action::Submit,
-        _ => {
-            return make_sanity_error("invalid URI path");
-        }
-    };
+    if req.url() != "/submit" {
+        return make_sanity_error("invalid URI path");
+    }
 
     // parse body
     let mut body = vec![];
@@ -122,22 +105,33 @@ fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
     }
 
     // act on the request
-    info!("processing request: {}", action);
-    let response = match schedule(&REGISTRY, dir.path()) {
-        Ok((hash, scheduled)) => {
-            let head = if scheduled {
-                "is scheduled for analysis"
-            } else {
+    info!("processing request");
+    let response = match REGISTRY.register(dir.path()) {
+        Ok((packet, existed)) => {
+            // prepare the message first
+            let head = if existed {
                 "has been submitted before"
+            } else {
+                "is scheduled for analysis"
             };
-            make_ok(format!(
+            let msg = format!(
                 "the package {}, you can check its status or result at https://{}:{}/{}",
-                head, HOST, PORT, hash
-            ))
+                head,
+                HOST,
+                PORT,
+                packet.id()
+            );
+            info!("packet {}: {}", head, packet.id());
+
+            // send the packet to channel
+            match channel.send(packet) {
+                Ok(_) => make_ok(msg),
+                Err(err) => make_server_error(format!("failed to schedule analysis: {}", err)),
+            }
         }
         Err(err) => {
             info!("invalid packet: {}", err);
-            make_sanity_error(format!("failed to schedule analysis: {}", err))
+            make_sanity_error(format!("package does not seem to be well-formed: {}", err))
         }
     };
 
@@ -162,25 +156,61 @@ fn main() {
         .init()
         .expect("unable to setup logging");
 
-    // initialize everything
+    // initialize
     info!("number of packets found: {}", REGISTRY.count());
+
+    // setup channel
+    let (channel_send, channel_recv) = crossbeam_channel::unbounded::<Packet>();
+
+    // spawn workers
+    let mut worker_handles = Vec::with_capacity(NUMBER_OF_WORKERS);
+    for i in 0..NUMBER_OF_WORKERS {
+        let c_recv = channel_recv.clone();
+        let handle = thread::spawn(move || loop {
+            // wait for packet
+            let packet = match c_recv.recv() {
+                Ok(pkt) => pkt,
+                Err(err) => {
+                    error!(
+                        "[worker {}] unexpected error when receiving packets: {}",
+                        i, err
+                    );
+                    continue;
+                }
+            };
+
+            // process the packet
+            match analyze(&REGISTRY, &packet) {
+                Ok(_) => (),
+                Err(err) => {
+                    error!(
+                        "[worker {}] unexpected error when analyzing packet: {}",
+                        i, err
+                    );
+                }
+            }
+        });
+        worker_handles.push(handle);
+    }
 
     // bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
     let server = tiny_http::Server::http(addr).expect("server binding");
     info!("socket bounded");
 
+    // spawn servers
     let pointer = Arc::new(server);
-    let mut handles = Vec::with_capacity(NUMBER_OF_SERVERS);
+    let mut server_handles = Vec::with_capacity(NUMBER_OF_SERVERS);
     for i in 0..NUMBER_OF_SERVERS {
         let instance = Arc::clone(&pointer);
+        let c_send = channel_send.clone();
         let handle = thread::spawn(move || loop {
             // wait for request
             let mut request = match instance.recv() {
                 Ok(req) => req,
                 Err(err) => {
                     error!(
-                        "[instance {}] unexpected error when receiving requests: {}",
+                        "[server {}] unexpected error when receiving requests: {}",
                         i, err
                     );
                     continue;
@@ -188,30 +218,40 @@ fn main() {
             };
 
             // process it
-            let response = entrypoint(&mut request);
+            let response = entrypoint(&mut request, &c_send);
 
             // send back response
             match request.respond(response) {
                 Ok(_) => (),
                 Err(err) => {
                     error!(
-                        "[instance {}] unexpected error when sending response: {}",
+                        "[server {}] unexpected error when sending response: {}",
                         i, err
                     );
                 }
             }
         });
-        handles.push(handle);
+        server_handles.push(handle);
     }
 
     // wait for termination
-    for (i, h) in handles.into_iter().enumerate() {
+    for (i, h) in server_handles.into_iter().enumerate() {
         match h.join() {
             Ok(_) => {
-                info!("[instance {}] terminated", i);
+                info!("[server {}] terminated", i);
             }
             Err(err) => {
-                error!("[instance {}] unexpected error on join: {:?}", i, err);
+                error!("[server {}] unexpected error on join: {:?}", i, err);
+            }
+        }
+    }
+    for (i, h) in worker_handles.into_iter().enumerate() {
+        match h.join() {
+            Ok(_) => {
+                info!("[worker {}] terminated", i);
+            }
+            Err(err) => {
+                error!("[worker {}] unexpected error on join: {:?}", i, err);
             }
         }
     }

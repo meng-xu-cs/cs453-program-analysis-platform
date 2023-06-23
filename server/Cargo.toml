@@ -9,11 +9,11 @@ edition = "2021"
 [dependencies]
 # http
 tiny_http = "*"
+# threading
+crossbeam-channel = "*"
 # filesystem
 zip = "*"
 tempdir = "*"
-# auth
-ssh-key = { version = "*", features = ["ed25519"] }
 # logging
 log = "*"
 stderrlog = "*"
