@@ -11,10 +11,10 @@ use sha3::{Digest, Sha3_256};
 use crate::process::AnalysisResult;
 
 /// Marker for unexpected internal error
-const MAKRER_ERROR: &str = "error";
+const MARKER_ERROR: &str = "error";
 
 /// Marker for completed analysis
-const MAKRER_RESULT: &str = "result.json";
+const MARKER_RESULT: &str = "result.json";
 
 /// Uniquely identifies a packet
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -65,14 +65,14 @@ impl Registry {
             let packet = Packet { hash };
 
             // on completed
-            let path_result = path.join(MAKRER_RESULT);
+            let path_result = path.join(MARKER_RESULT);
             if path_result.exists() {
                 packets.insert(packet, Status::Completed);
                 continue;
             }
 
             // on error (re-queue the packet for analysis)
-            let path_error = path.join(MAKRER_ERROR);
+            let path_error = path.join(MARKER_ERROR);
             if path_error.exists() {
                 fs::remove_file(&path_error)?;
             }
@@ -330,7 +330,7 @@ impl Registry {
     pub fn save_result(&self, packet: Packet, result: AnalysisResult) -> Result<()> {
         // save to filesystem
         let locked = self.root.read().expect("lock");
-        let path = locked.join(&packet.hash).join(MAKRER_RESULT);
+        let path = locked.join(&packet.hash).join(MARKER_RESULT);
         drop(locked);
         serde_json::to_writer(File::create(path)?, &result)?;
 
@@ -352,7 +352,7 @@ impl Registry {
     pub fn save_error(&self, packet: Packet, error: String) -> Result<()> {
         // save to filesystem
         let locked = self.root.read().expect("lock");
-        let path = locked.join(&packet.hash).join(MAKRER_ERROR);
+        let path = locked.join(&packet.hash).join(MARKER_ERROR);
         drop(locked);
         fs::write(path, error)?;
 
@@ -394,7 +394,7 @@ impl Registry {
             }
             Some(Status::Completed) => {
                 let locked = self.root.read().expect("lock");
-                let path = locked.join(&packet.hash).join(MAKRER_RESULT);
+                let path = locked.join(&packet.hash).join(MARKER_RESULT);
                 drop(locked);
                 if !path.exists() {
                     bail!("unable to find analysis result file");
@@ -404,7 +404,7 @@ impl Registry {
             }
             Some(Status::Error) => {
                 let locked = self.root.read().expect("lock");
-                let path = locked.join(&packet.hash).join(MAKRER_ERROR);
+                let path = locked.join(&packet.hash).join(MARKER_ERROR);
                 drop(locked);
                 if !path.exists() {
                     bail!("unable to find analysis error file");
