@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::packet::{Packet, Registry};
 use crate::util_docker::{Dock, ExitStatus};
@@ -128,8 +130,8 @@ pub fn run_baseline(
 #[derive(Serialize, Deserialize)]
 pub struct ResultGcov {
     pub completed: bool,
-    pub num_blocks: usize,
-    pub cov_blocks: usize,
+    pub num_blocks: u64,
+    pub cov_blocks: u64,
 }
 
 pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result<ResultGcov> {
@@ -174,7 +176,7 @@ pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
     }
 
     // calculate GCOV in json format
-    let (host_path_gcov_report, dock_path_gcov_report) = docked.wks_path("gcov.json");
+    let (host_path_gcov_report, dock_path_gcov_report) = docked.wks_path("report.json");
     let result = docker_run(
         dock,
         &docked.host_base,
@@ -198,12 +200,19 @@ pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
     if !host_path_gcov_report.exists() {
         bail!("unable to find the GCOV report on host system");
     }
+    let report: Value = serde_json::from_reader(File::open(host_path_gcov_report)?)?;
+    let (num_blocks, cov_blocks) = match parse_gcov_json_report(&report) {
+        None => {
+            bail!("unable to parse the GCOV report");
+        }
+        Some((n, c)) => (n, c),
+    };
 
     // done with GCOV testing
     Ok(ResultGcov {
         completed: true,
-        num_blocks: 0,
-        cov_blocks: 0,
+        num_blocks,
+        cov_blocks,
     })
 }
 
@@ -217,4 +226,18 @@ fn docker_run(
     let mut binding = BTreeMap::new();
     binding.insert(base, DOCKER_MNT.to_string());
     dock.sandbox(DOCKER_TAG, cmd, timeout, binding, None)
+}
+
+fn parse_gcov_json_report(v: &Value) -> Option<(u64, u64)> {
+    let mut num_blocks = 0;
+    let mut cov_blocks = 0;
+    let report = v.as_object()?;
+    for item_file in report.get("files")?.as_array()? {
+        for item_func in item_file.as_object()?.get("functions")?.as_array()? {
+            let item_func = item_func.as_object()?;
+            num_blocks += item_func.get("blocks")?.as_u64()?;
+            cov_blocks += item_func.get("blocks_executed")?.as_u64()?;
+        }
+    }
+    Some((num_blocks, cov_blocks))
 }
