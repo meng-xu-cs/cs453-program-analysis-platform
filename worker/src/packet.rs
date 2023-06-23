@@ -432,8 +432,11 @@ pub struct DockedPacket {
 
 impl DockedPacket {
     /// Derive a workspace path
-    pub fn wks_path(&self, seg: &str) -> String {
-        path_to_str(Path::new(&self.path_output).join(seg))
+    pub fn wks_path(&self, seg: &str) -> (PathBuf, String) {
+        (
+            self.host_output.join(seg),
+            path_to_str(Path::new(&self.path_output).join(seg)),
+        )
     }
 }
 

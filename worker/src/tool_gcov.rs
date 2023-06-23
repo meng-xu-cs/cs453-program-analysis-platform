@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +51,7 @@ pub fn run_baseline(
     let docked = registry.mk_dockerized_packet(packet, "baseline", DOCKER_MNT)?;
 
     // compile the program
-    let dock_path_compiled = docked.wks_path("main");
+    let (_, dock_path_compiled) = docked.wks_path("main");
     let result = docker_run(
         dock,
         &docked.host_base,
@@ -121,6 +121,89 @@ pub fn run_baseline(
         input_fail,
         crash_pass,
         crash_fail,
+    })
+}
+
+/// Result for baseline evaluation
+#[derive(Serialize, Deserialize)]
+pub struct ResultGcov {
+    pub completed: bool,
+    pub num_blocks: usize,
+    pub cov_blocks: usize,
+}
+
+pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result<ResultGcov> {
+    let docked = registry.mk_dockerized_packet(packet, "gcov", DOCKER_MNT)?;
+
+    // compile the program
+    let (_, dock_path_compiled) = docked.wks_path("main");
+    let result = docker_run(
+        dock,
+        &docked.host_base,
+        vec![
+            "gcc".to_string(),
+            "-fprofile-arcs".to_string(),
+            "-ftest-coverage".to_string(),
+            "-g".to_string(),
+            docked.path_program.clone(),
+            "-o".to_string(),
+            dock_path_compiled.clone(),
+        ],
+        None,
+    )?;
+    if !matches!(result, ExitStatus::Success) {
+        return Ok(ResultGcov {
+            completed: false,
+            num_blocks: 0,
+            cov_blocks: 0,
+        });
+    }
+
+    // run each tests in input directory
+    for test in docked.path_input_cases.iter() {
+        docker_run(
+            dock,
+            &docked.host_base,
+            vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                format!("{} < {}", dock_path_compiled, test),
+            ],
+            Some(TIMEOUT_TEST_CASE),
+        )?;
+    }
+
+    // calculate GCOV in json format
+    let (host_path_gcov_report, dock_path_gcov_report) = docked.wks_path("gcov.json");
+    let result = docker_run(
+        dock,
+        &docked.host_base,
+        vec![
+            "bash".to_string(),
+            "-c".to_string(),
+            format!(
+                "gcov -o {} -n main.c -j -t > {}",
+                docked.path_output, dock_path_gcov_report
+            ),
+        ],
+        None,
+    )?;
+    if !matches!(result, ExitStatus::Success) {
+        return Ok(ResultGcov {
+            completed: false,
+            num_blocks: 0,
+            cov_blocks: 0,
+        });
+    }
+    if !host_path_gcov_report.exists() {
+        bail!("unable to find the GCOV report on host system");
+    }
+
+    // done with GCOV testing
+    Ok(ResultGcov {
+        completed: true,
+        num_blocks: 0,
+        cov_blocks: 0,
     })
 }
 
