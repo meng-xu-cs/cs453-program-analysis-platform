@@ -171,7 +171,7 @@ pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
                 "-c".to_string(),
                 format!("{} < {}", dock_path_compiled, test),
             ],
-            Some(TIMEOUT_TEST_CASE),
+            None,
         )?;
     }
 
