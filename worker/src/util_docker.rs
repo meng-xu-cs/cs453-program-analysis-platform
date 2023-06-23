@@ -12,7 +12,7 @@ use bollard::container::{
 };
 use bollard::errors::Error::DockerContainerWaitError;
 use bollard::image::{BuildImageOptions, CommitContainerOptions, RemoveImageOptions};
-use bollard::models::HostConfig;
+use bollard::models::{HostConfig, ResourcesUlimits};
 use bollard::Docker;
 use futures_util::StreamExt;
 use log::{debug, error, info};
@@ -390,6 +390,11 @@ impl Dock {
             working_dir: workdir,
             cmd: Some(cmd),
             host_config: Some(HostConfig {
+                ulimits: Some(vec![ResourcesUlimits {
+                    name: Some("stack".to_string()),
+                    soft: Some(-1),
+                    hard: Some(-1),
+                }]),
                 binds: Some(
                     binding
                         .into_iter()
