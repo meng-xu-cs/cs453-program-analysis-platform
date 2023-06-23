@@ -1,17 +1,21 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
 
 use crate::packet::{Packet, Registry};
-use crate::util_docker::Dock;
+use crate::util_docker::{Dock, ExitStatus};
 
 /// Tag of the Docker image
 const DOCKER_TAG: &str = "gcov";
 
 /// Default mount point for work directory
 const DOCKER_MNT: &str = "/test";
+
+/// Timeout for testcase execution
+const TIMEOUT_TEST_CASE: Duration = Duration::from_secs(10);
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
@@ -55,8 +59,9 @@ pub fn run_baseline(
             "-o".to_string(),
             dock_path_compiled.clone(),
         ],
+        None,
     )?;
-    if !result {
+    if !matches!(result, ExitStatus::Success) {
         return Ok(ResultBaseline {
             compiled: false,
             input_pass: 0,
@@ -78,8 +83,9 @@ pub fn run_baseline(
                 "-c".to_string(),
                 format!("{} < {}", dock_path_compiled, test),
             ],
+            Some(TIMEOUT_TEST_CASE),
         )?;
-        if result {
+        if matches!(result, ExitStatus::Success) {
             input_pass += 1;
         } else {
             input_fail += 1;
@@ -97,8 +103,9 @@ pub fn run_baseline(
                 "-c".to_string(),
                 format!("{} < {}", dock_path_compiled, test),
             ],
+            Some(TIMEOUT_TEST_CASE),
         )?;
-        if result {
+        if matches!(result, ExitStatus::Failure) {
             crash_pass += 1;
         } else {
             crash_fail += 1;
@@ -116,8 +123,13 @@ pub fn run_baseline(
 }
 
 /// Utility helper on invoking this Docker image
-fn docker_run(dock: &mut Dock, base: &Path, cmd: Vec<String>) -> Result<bool> {
+fn docker_run(
+    dock: &mut Dock,
+    base: &Path,
+    cmd: Vec<String>,
+    timeout: Option<Duration>,
+) -> Result<ExitStatus> {
     let mut binding = BTreeMap::new();
     binding.insert(base, DOCKER_MNT.to_string());
-    dock.invoke(DOCKER_TAG, cmd, false, false, false, binding, None)
+    dock.sandbox(DOCKER_TAG, cmd, timeout, binding, None)
 }

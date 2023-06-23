@@ -3,6 +3,7 @@ use std::future::Future;
 use std::io;
 use std::io::{Read, Seek, Write};
 use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{bail, Result};
 use bollard::container::{
@@ -19,8 +20,18 @@ use memfile::MemFile;
 use tar::Builder;
 use tokio::runtime;
 
+/// Default timeout for sandboxed execution
+const DEFAULT_SANDBOX_TIMEOUT: Duration = Duration::from_secs(60);
+
 struct ImageID(String);
 struct ContainerID(String);
+
+/// Exit status of the execution
+pub enum ExitStatus {
+    Success,
+    Failure,
+    Timeout,
+}
 
 /// Utility for waiting for async actions
 fn wait_for<F: Future>(future: F) -> F::Output {
@@ -235,7 +246,13 @@ impl Dock {
     }
 
     /// Run a container
-    async fn _exec_async(&mut self, id: &ContainerID, console: bool) -> Result<bool> {
+    async fn _exec_async(
+        &mut self,
+        id: &ContainerID,
+        console: bool,
+        timeout: Option<Duration>,
+        start_time: SystemTime,
+    ) -> Result<ExitStatus> {
         // follow output
         let opts = LogsOptions {
             follow: true,
@@ -267,6 +284,17 @@ impl Dock {
                 LogOutput::Console { message } => {
                     if console {
                         io::stdout().write_all(&message)?;
+                    }
+                }
+            }
+
+            // check timeout
+            match timeout.as_ref() {
+                None => (),
+                Some(duration) => {
+                    let elapsed = SystemTime::now().duration_since(start_time)?;
+                    if &elapsed > duration {
+                        return Ok(ExitStatus::Timeout);
                     }
                 }
             }
@@ -304,14 +332,15 @@ impl Dock {
             }
         }
 
-        // check whether the process exit gracefully
-        let exec_ok = match status {
+        // simplify the exit status
+        let exit_status = match status {
             None => {
                 bail!("not receiving a status code");
             }
-            Some(code) => code == 0,
+            Some(0) => ExitStatus::Success,
+            Some(_) => ExitStatus::Failure,
         };
-        Ok(exec_ok)
+        Ok(exit_status)
     }
 
     /// Run a container based on an image file
@@ -324,9 +353,10 @@ impl Dock {
         net: bool,
         tty: bool,
         console: bool,
+        timeout: Option<Duration>,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
-    ) -> Result<bool> {
+    ) -> Result<ExitStatus> {
         // check container existence
         let ephemeral_name = format!("{}-ephemeral", tag);
         if let Some(id) = self.get_container(&ephemeral_name)? {
@@ -390,33 +420,41 @@ impl Dock {
                 bail!(err);
             }
         }
+        let timestamp = SystemTime::now();
 
         // wait for the termination of the container
-        let exec_ok = match wait_for(self._exec_async(&container_id, console)) {
-            Ok(r) => r,
-            Err(err) => {
-                self.del_container(&container_id)?;
-                bail!(err);
-            }
-        };
+        let exit_status =
+            match wait_for(self._exec_async(&container_id, console, timeout, timestamp)) {
+                Ok(r) => r,
+                Err(err) => {
+                    self.del_container(&container_id)?;
+                    bail!(err);
+                }
+            };
 
-        // decide if we need to commit or remove the container
+        // decide if we need to commit the container
         if let Some(commit) = name {
-            if exec_ok {
-                // commit the container
-                match wait_for(self.docker.commit_container(
-                    CommitContainerOptions {
-                        container: container_id.0.clone(),
-                        repo: commit,
-                        ..Default::default()
-                    },
-                    Config::<String>::default(),
-                )) {
-                    Ok(_) => (),
-                    Err(err) => {
-                        self.del_container(&container_id)?;
-                        bail!(err);
+            match exit_status {
+                ExitStatus::Success => {
+                    // commit the container
+                    match wait_for(self.docker.commit_container(
+                        CommitContainerOptions {
+                            container: container_id.0.clone(),
+                            repo: commit,
+                            ..Default::default()
+                        },
+                        Config::<String>::default(),
+                    )) {
+                        Ok(_) => (),
+                        Err(err) => {
+                            self.del_container(&container_id)?;
+                            bail!(err);
+                        }
                     }
+                }
+                _ => {
+                    self.del_container(&container_id)?;
+                    bail!("aborting commit due to execution failure");
                 }
             }
         }
@@ -424,8 +462,8 @@ impl Dock {
         // remove the container
         self.del_container(&container_id)?;
 
-        // return whether the execution is successful or not
-        Ok(exec_ok)
+        // return the exit status of this execution
+        Ok(exit_status)
     }
 
     /// Run a container based on an image file and commit it back
@@ -456,19 +494,17 @@ impl Dock {
         }
 
         // incremental build
-        let exec_ok = self._run(
+        self._run(
             tag,
             Some(name.to_string()),
             cmd,
             net,
             tty,
             true,
+            None,
             binding,
             workdir,
         )?;
-        if !exec_ok {
-            bail!("aborting commit due to execution failure");
-        }
 
         // done
         Ok(())
@@ -476,16 +512,38 @@ impl Dock {
 
     /// Invoke a simple command on a container and discard it
     #[allow(clippy::too_many_arguments)]
-    pub fn invoke(
+    fn invoke(
         &mut self,
         tag: &str,
         cmd: Vec<String>,
         net: bool,
         tty: bool,
         console: bool,
+        timeout: Option<Duration>,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
-    ) -> Result<bool> {
-        self._run(tag, None, cmd, net, tty, console, binding, workdir)
+    ) -> Result<ExitStatus> {
+        self._run(tag, None, cmd, net, tty, console, timeout, binding, workdir)
+    }
+
+    /// Invoke a simple command on a container in sandboxed environment and discard it
+    pub fn sandbox(
+        &mut self,
+        tag: &str,
+        cmd: Vec<String>,
+        timeout: Option<Duration>,
+        binding: BTreeMap<&Path, String>,
+        workdir: Option<String>,
+    ) -> Result<ExitStatus> {
+        self.invoke(
+            tag,
+            cmd,
+            false,
+            true,
+            false,
+            Some(timeout.unwrap_or(DEFAULT_SANDBOX_TIMEOUT)),
+            binding,
+            workdir,
+        )
     }
 }
