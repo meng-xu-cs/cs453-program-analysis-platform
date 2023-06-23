@@ -1,7 +1,8 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::packet::{Packet, Registry};
-use crate::tool_gcov::run_baseline;
+use crate::tool_gcov::{run_baseline, ResultBaseline};
 use crate::util_docker::Dock;
 use crate::{tool_aflpp, tool_gcov, tool_klee, tool_symcc};
 
@@ -15,9 +16,16 @@ pub fn provision(force: bool) -> Result<()> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AnalysisResult {
+    result_baseline: ResultBaseline,
+}
+
 /// Analyze a packet
-pub fn analyze(registry: &Registry, packet: &Packet) -> Result<()> {
+pub fn analyze(registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
     let mut dock = Dock::new()?;
-    run_baseline(&mut dock, registry, packet)?;
-    Ok(())
+    let result_baseline = run_baseline(&mut dock, registry, packet)?;
+
+    // collect and dump result
+    Ok(AnalysisResult { result_baseline })
 }

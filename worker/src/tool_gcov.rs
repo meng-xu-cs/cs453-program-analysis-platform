@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 
 use crate::packet::{Packet, Registry};
 use crate::util_docker::{Dock, ExitStatus};
@@ -32,6 +33,7 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
 }
 
 /// Result for baseline evaluation
+#[derive(Serialize, Deserialize)]
 pub struct ResultBaseline {
     pub compiled: bool,
     pub input_pass: usize,

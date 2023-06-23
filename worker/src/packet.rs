@@ -8,6 +8,8 @@ use std::{fs, io};
 use anyhow::{anyhow, bail, Result};
 use sha3::{Digest, Sha3_256};
 
+use crate::process::AnalysisResult;
+
 /// Marker for unexpected internal error
 const MAKRER_ERROR: &str = "error";
 
@@ -30,7 +32,6 @@ impl Packet {
 /// Packet analysis status
 pub enum Status {
     Received,
-    Queued,
     Error,
     Completed,
 }
@@ -310,6 +311,40 @@ impl Registry {
 
         // done with the construction
         Ok(dock_packet)
+    }
+
+    /// Save analysis result
+    pub fn save_result(&self, packet: Packet, result: AnalysisResult) -> Result<()> {
+        // save to filesystem
+        let locked = self.root.read().expect("lock");
+        let path = locked.join(&packet.hash).join(MAKRER_RESULT);
+        drop(locked);
+        serde_json::to_writer(File::create(path)?, &result)?;
+
+        // mark availability
+        let mut locked = self.packets.write().expect("lock");
+        locked.insert(packet, Status::Completed);
+        drop(locked);
+
+        // done
+        Ok(())
+    }
+
+    /// Save analysis error
+    pub fn save_error(&self, packet: Packet, error: String) -> Result<()> {
+        // save to filesystem
+        let locked = self.root.read().expect("lock");
+        let path = locked.join(&packet.hash).join(MAKRER_ERROR);
+        drop(locked);
+        fs::write(path, error)?;
+
+        // mark availability
+        let mut locked = self.packets.write().expect("lock");
+        locked.insert(packet, Status::Error);
+        drop(locked);
+
+        // done
+        Ok(())
     }
 }
 

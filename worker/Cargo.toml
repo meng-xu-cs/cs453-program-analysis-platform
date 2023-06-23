@@ -24,3 +24,6 @@ bollard = "*"
 # hashing
 hex = "*"
 sha3 = "*"
+# serialization
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"

@@ -178,18 +178,31 @@ fn main() {
                     continue;
                 }
             };
-            info!("[worker {}] received packet: {}", i, packet.id());
+            let hash = packet.id().to_string();
+            info!("[worker {}] received packet: {}", i, hash);
 
             // process the packet
             match analyze(&REGISTRY, &packet) {
-                Ok(_) => {
-                    info!("[worker {}] packet analyzed: {}", i, packet.id());
+                Ok(result) => {
+                    match REGISTRY.save_result(packet, result) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            error!("[worker {}] failed to save analysis result: {}", i, e);
+                        }
+                    };
+                    info!("[worker {}] packet analyzed: {}", i, hash);
                 }
                 Err(err) => {
                     error!(
                         "[worker {}] unexpected error when analyzing packet: {}",
                         i, err
                     );
+                    match REGISTRY.save_error(packet, err.to_string()) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            error!("[worker {}] failed to save analysis error: {}", i, e);
+                        }
+                    };
                 }
             }
         });

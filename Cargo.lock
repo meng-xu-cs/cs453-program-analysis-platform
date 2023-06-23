@@ -305,6 +305,8 @@ dependencies = [
  "log",
  "memfile",
  "once_cell",
+ "serde",
+ "serde_json",
  "sha3",
  "stderrlog",
  "tar",
