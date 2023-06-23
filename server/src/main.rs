@@ -204,13 +204,16 @@ fn main() {
     let (channel_send, channel_recv) = crossbeam_channel::unbounded::<Packet>();
 
     // initialize the registry
+    let mut count = 0;
     for (packet, status) in REGISTRY.snapshot() {
         if matches!(status, Status::Received) {
             info!("queueing packet: {}", packet.id());
             REGISTRY.queue(packet.clone());
             channel_send.send(packet).expect("channel");
         }
+        count += 1;
     }
+    info!("registry initialized with {} packets found", count);
 
     // spawn workers
     let mut worker_handles = Vec::with_capacity(NUMBER_OF_WORKERS);
