@@ -18,19 +18,19 @@ pub fn provision(force: bool) -> Result<()> {
     Ok(())
 }
 
-/// Analyze a packet
-pub fn analyze<P: AsRef<Path>>(registry: &Registry, src: P) -> Result<()> {
+/// Schedule a packet
+pub fn schedule<P: AsRef<Path>>(registry: &Registry, src: P) -> Result<(String, bool)> {
     let (packet, existed) = registry.register(src)?;
 
     // shortcut on previously submitted packet
     if existed {
         info!("packet already exists: {}", packet.id());
-        return Ok(());
+        return Ok((packet.id().to_string(), false));
     }
 
     // analysis
     info!("scheduling analysis for packet: {}", packet.id());
     let mut dock = Dock::new()?;
     run_baseline(&mut dock, registry, &packet)?;
-    Ok(())
+    Ok((packet.id().to_string(), true))
 }

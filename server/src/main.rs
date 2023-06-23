@@ -12,7 +12,7 @@ use tiny_http::{Method, Request, Response};
 use zip::ZipArchive;
 
 use cs453_pap_worker::packet::Registry;
-use cs453_pap_worker::process::analyze;
+use cs453_pap_worker::process::schedule;
 
 /// Absolute path to the `data` directory
 static REGISTRY: Lazy<Registry> = Lazy::new(|| {
@@ -24,6 +24,9 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
     // construct the registry
     Registry::new(path).expect("unable to initialize the registry")
 });
+
+/// Hostname for the server
+const HOST: &str = "localhost";
 
 /// Port number for the server
 const PORT: u16 = 8000;
@@ -120,13 +123,23 @@ fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
 
     // act on the request
     info!("processing request: {}", action);
-    match analyze(&REGISTRY, dir.path()) {
-        Ok(_) => (),
+    let response = match schedule(&REGISTRY, dir.path()) {
+        Ok((hash, scheduled)) => {
+            let head = if scheduled {
+                "is scheduled for analysis"
+            } else {
+                "has been submitted before"
+            };
+            make_ok(format!(
+                "the package {}, you can check its status or result at https://{}:{}/{}",
+                head, HOST, PORT, hash
+            ))
+        }
         Err(err) => {
             info!("invalid packet: {}", err);
-            return make_sanity_error(format!("failed to schedule analysis: {}", err));
+            make_sanity_error(format!("failed to schedule analysis: {}", err))
         }
-    }
+    };
 
     // clean-up
     match dir.close() {
@@ -136,7 +149,7 @@ fn entrypoint(req: &mut Request) -> Response<Cursor<Vec<u8>>> {
         }
     }
 
-    make_ok("everything is good")
+    response
 }
 
 /// Start server
