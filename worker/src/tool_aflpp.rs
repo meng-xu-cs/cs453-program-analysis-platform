@@ -58,7 +58,7 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
         return Ok(ResultAFLpp { completed: false });
     }
 
-    // calculate GCOV in json format
+    // fuzz the program
     let (host_path_afl_out, dock_path_afl_out) = docked.wks_path("output");
     let result = docker_run(
         dock,
@@ -68,7 +68,7 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
             "-i".to_string(),
             docked.path_input,
             "-o".to_string(),
-            dock_path_afl_out,
+            dock_path_afl_out.clone(),
             "--".to_string(),
             dock_path_compiled,
         ],
@@ -80,6 +80,19 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
     if !host_path_afl_out.exists() {
         bail!("unable to find the AFL++ output directory on host system");
     }
+
+    // enable host access to the output directory
+    docker_run(
+        dock,
+        &docked.host_base,
+        vec![
+            "chmod".to_string(),
+            "-R".to_string(),
+            "777".to_string(),
+            dock_path_afl_out,
+        ],
+        None,
+    )?;
 
     // done with AFL++ fuzzing
     Ok(ResultAFLpp { completed: true })
