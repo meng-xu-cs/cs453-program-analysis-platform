@@ -235,7 +235,7 @@ impl Dock {
     }
 
     /// Run a container
-    async fn _exec_async(&mut self, id: &ContainerID) -> Result<bool> {
+    async fn _exec_async(&mut self, id: &ContainerID, console: bool) -> Result<bool> {
         // follow output
         let opts = LogsOptions {
             follow: true,
@@ -247,21 +247,27 @@ impl Dock {
         while let Some(frame) = stream.next().await {
             let frame = frame?;
             match frame {
-                LogOutput::StdOut { message } => {
-                    io::stdout().write_all(&message)?;
-                }
-                LogOutput::StdErr { message } => {
-                    io::stderr().write_all(&message)?;
-                }
                 LogOutput::StdIn { message } => {
-                    error!(
+                    bail!(
                         "unexpected message to stdin: {}",
                         String::from_utf8(message.to_vec())
                             .unwrap_or_else(|_| "<not-utf8-string>".to_string())
-                    )
+                    );
+                }
+                LogOutput::StdOut { message } => {
+                    if console {
+                        io::stdout().write_all(&message)?;
+                    }
+                }
+                LogOutput::StdErr { message } => {
+                    if console {
+                        io::stderr().write_all(&message)?;
+                    }
                 }
                 LogOutput::Console { message } => {
-                    io::stdout().write_all(&message)?;
+                    if console {
+                        io::stdout().write_all(&message)?;
+                    }
                 }
             }
         }
@@ -297,10 +303,15 @@ impl Dock {
                 bail!("conflicting status code");
             }
         }
-        if status.is_none() {
-            bail!("not receiving a status code");
-        }
-        Ok(status.unwrap() == 0)
+
+        // check whether the process exit gracefully
+        let exec_ok = match status {
+            None => {
+                bail!("not receiving a status code");
+            }
+            Some(code) => code == 0,
+        };
+        Ok(exec_ok)
     }
 
     /// Run a container based on an image file
@@ -312,6 +323,7 @@ impl Dock {
         cmd: Vec<String>,
         net: bool,
         tty: bool,
+        console: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
     ) -> Result<bool> {
@@ -380,7 +392,7 @@ impl Dock {
         }
 
         // wait for the termination of the container
-        let exec_ok = match wait_for(self._exec_async(&container_id)) {
+        let exec_ok = match wait_for(self._exec_async(&container_id, console)) {
             Ok(r) => r,
             Err(err) => {
                 self.del_container(&container_id)?;
@@ -444,7 +456,16 @@ impl Dock {
         }
 
         // incremental build
-        let exec_ok = self._run(tag, Some(name.to_string()), cmd, net, tty, binding, workdir)?;
+        let exec_ok = self._run(
+            tag,
+            Some(name.to_string()),
+            cmd,
+            net,
+            tty,
+            true,
+            binding,
+            workdir,
+        )?;
         if !exec_ok {
             bail!("aborting commit due to execution failure");
         }
@@ -461,9 +482,10 @@ impl Dock {
         cmd: Vec<String>,
         net: bool,
         tty: bool,
+        console: bool,
         binding: BTreeMap<&Path, String>,
         workdir: Option<String>,
     ) -> Result<bool> {
-        self._run(tag, None, cmd, net, tty, binding, workdir)
+        self._run(tag, None, cmd, net, tty, console, binding, workdir)
     }
 }

@@ -119,5 +119,5 @@ pub fn run_baseline(
 fn docker_run(dock: &mut Dock, base: &Path, cmd: Vec<String>) -> Result<bool> {
     let mut binding = BTreeMap::new();
     binding.insert(base, DOCKER_MNT.to_string());
-    dock.invoke(DOCKER_TAG, cmd, false, false, binding, None)
+    dock.invoke(DOCKER_TAG, cmd, false, false, false, binding, None)
 }
