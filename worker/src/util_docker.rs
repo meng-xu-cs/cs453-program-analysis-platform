@@ -9,6 +9,7 @@ use bollard::container::{
     Config, CreateContainerOptions, ListContainersOptions, LogOutput, LogsOptions,
     RemoveContainerOptions,
 };
+use bollard::errors::Error::DockerContainerWaitError;
 use bollard::image::{BuildImageOptions, CommitContainerOptions, RemoveImageOptions};
 use bollard::models::HostConfig;
 use bollard::Docker;
@@ -269,15 +270,29 @@ impl Dock {
         let mut status = None;
         let mut stream = self.docker.wait_container::<String>(&id.0, None);
         while let Some(frame) = stream.next().await {
-            let frame = frame?;
-            if let Some(msg) = frame.error {
-                error!(
-                    "[docker] {}",
-                    msg.message.unwrap_or_else(|| "<none>".to_string())
-                );
-            }
+            let exit_code = match frame {
+                Ok(resp) => {
+                    if let Some(msg) = resp.error {
+                        error!(
+                            "[docker] {}",
+                            msg.message.unwrap_or_else(|| "<none>".to_string())
+                        );
+                    }
+                    resp.status_code
+                }
+                Err(DockerContainerWaitError { error, code }) => {
+                    if !error.is_empty() {
+                        bail!("unexpected wait error: {}", error);
+                    }
+                    code
+                }
+                Err(err) => {
+                    bail!(err);
+                }
+            };
+
             if status.is_none() {
-                status = Some(frame.status_code);
+                status = Some(exit_code);
             } else {
                 bail!("conflicting status code");
             }
