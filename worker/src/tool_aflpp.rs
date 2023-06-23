@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -36,6 +37,7 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
 #[derive(Serialize, Deserialize)]
 pub struct ResultAFLpp {
     pub completed: bool,
+    pub num_crashes: u64,
 }
 
 pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result<ResultAFLpp> {
@@ -55,7 +57,10 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
         None,
     )?;
     if !matches!(result, ExitStatus::Success) {
-        return Ok(ResultAFLpp { completed: false });
+        return Ok(ResultAFLpp {
+            completed: false,
+            num_crashes: 0,
+        });
     }
 
     // fuzz the program
@@ -75,10 +80,10 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
         Some(TIMEOUT_FUZZ),
     )?;
     if !matches!(result, ExitStatus::Timeout) {
-        return Ok(ResultAFLpp { completed: false });
-    }
-    if !host_path_afl_out.exists() {
-        bail!("unable to find the AFL++ output directory on host system");
+        return Ok(ResultAFLpp {
+            completed: false,
+            num_crashes: 0,
+        });
     }
 
     // enable host access to the output directory
@@ -94,8 +99,29 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
         None,
     )?;
 
+    // check number of crashes
+    let host_path_crash_dir = host_path_afl_out.join("default").join("crashes");
+    if !host_path_crash_dir.exists() {
+        bail!("unable to find the AFL++ crash directory on host system");
+    }
+
+    let mut num_crashes = 0;
+    for item in fs::read_dir(host_path_crash_dir)? {
+        let item = item?;
+        if item
+            .file_name()
+            .to_str()
+            .map_or(true, |s| s != "README.txt")
+        {
+            num_crashes += 1;
+        }
+    }
+
     // done with AFL++ fuzzing
-    Ok(ResultAFLpp { completed: true })
+    Ok(ResultAFLpp {
+        completed: true,
+        num_crashes,
+    })
 }
 
 /// Utility helper on invoking this Docker image
