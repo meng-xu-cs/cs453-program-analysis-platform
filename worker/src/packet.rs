@@ -293,7 +293,7 @@ impl Registry {
         let mut dock_crash_cases = BTreeSet::new();
         for item in fs::read_dir(host_crash)? {
             let item = item?;
-            dock_crash_cases.insert(path_to_str(dock_input.join(item.file_name())));
+            dock_crash_cases.insert(path_to_str(dock_crash.join(item.file_name())));
         }
 
         let dock_packet = DockedPacket {
