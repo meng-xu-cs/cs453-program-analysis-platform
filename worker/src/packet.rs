@@ -30,6 +30,7 @@ impl Packet {
 }
 
 /// Packet analysis status
+#[derive(Copy, Clone)]
 pub enum Status {
     Received,
     Error,
@@ -345,6 +346,42 @@ impl Registry {
 
         // done
         Ok(())
+    }
+
+    /// Load analysis result or error
+    pub fn load_packet_status(&self, hash: String) -> Result<Option<String>> {
+        let packet = Packet { hash };
+
+        // check availability
+        let locked = self.packets.read().expect("lock");
+        let status = locked.get(&packet).cloned();
+        drop(locked);
+
+        let message = match status {
+            None => None,
+            Some(Status::Received) => Some("queued".to_string()),
+            Some(Status::Completed) => {
+                let locked = self.root.read().expect("lock");
+                let path = locked.join(&packet.hash).join(MAKRER_RESULT);
+                drop(locked);
+                if !path.exists() {
+                    bail!("unable to find analysis result file");
+                }
+                let result: AnalysisResult = serde_json::from_reader(File::open(path)?)?;
+                Some(serde_json::to_string(&result)?)
+            }
+            Some(Status::Error) => {
+                let locked = self.root.read().expect("lock");
+                let path = locked.join(&packet.hash).join(MAKRER_ERROR);
+                drop(locked);
+                if !path.exists() {
+                    bail!("unable to find analysis error file");
+                }
+                Some(fs::read_to_string(&path)?)
+            }
+        };
+
+        Ok(message)
     }
 }
 

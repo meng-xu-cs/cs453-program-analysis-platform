@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fs, thread};
 
+use anyhow::{bail, Result};
 use crossbeam_channel::Sender;
 use log::{error, info};
 use once_cell::sync::Lazy;
@@ -52,30 +53,69 @@ fn make_ok<S: AsRef<str>>(reason: S) -> Response<Cursor<Vec<u8>>> {
     Response::from_string(format!("{}\n", reason.as_ref())).with_status_code(200)
 }
 
-/// Entrypoint of the execution
-fn entrypoint(req: &mut Request, channel: &Sender<Packet>) -> Response<Cursor<Vec<u8>>> {
-    // shortcut for help
-    match req.method() {
-        Method::Post => (),
-        _ => {
-            return make_sanity_error("invalid method");
-        }
-    }
+/// Actions
+enum Action {
+    Default,
+    Submit(Vec<u8>),
+    Status(String),
+}
 
-    // parse command
-    if req.url() != "/submit" {
-        return make_sanity_error("invalid URI path");
+impl Action {
+    fn parse(req: &mut Request) -> Result<Self> {
+        // shortcut for help
+        let action = match req.method() {
+            Method::Post => {
+                // parse command
+                if req.url() != "/submit" {
+                    bail!("invalid URL");
+                }
+                // parse body
+                let mut body = vec![];
+                match req.as_reader().read_to_end(&mut body) {
+                    Ok(_) => (),
+                    Err(err) => {
+                        bail!("unable to read POST body: {}", err);
+                    }
+                }
+                Action::Submit(body)
+            }
+            Method::Get => {
+                // parse command
+                let url = req.url();
+                if url.len() <= 1 {
+                    Action::Default
+                } else {
+                    match url.strip_prefix("/status/") {
+                        None => {
+                            bail!("invalid URL");
+                        }
+                        Some(hash) => Action::Status(hash.to_string()),
+                    }
+                }
+            }
+            _ => {
+                bail!("invalid method");
+            }
+        };
+        Ok(action)
     }
+}
 
-    // parse body
-    let mut body = vec![];
-    match req.as_reader().read_to_end(&mut body) {
-        Ok(_) => (),
-        Err(err) => {
-            return make_sanity_error(format!("unable to read POST body: {}", err));
-        }
+/// Entrypoint for /status
+fn handle_status(hash: String) -> Response<Cursor<Vec<u8>>> {
+    info!("processing request /status/{}", hash);
+    match REGISTRY.load_packet_status(hash) {
+        Ok(None) => make_ok("no such package"),
+        Ok(Some(message)) => make_ok(message),
+        Err(err) => make_server_error(err.to_string()),
     }
+}
 
+/// Entrypoint for /submit
+fn handle_submit(body: Vec<u8>, channel: &Sender<Packet>) -> Response<Cursor<Vec<u8>>> {
+    info!("processing request /submit");
+
+    // construct zip archive
     let mut reader = Cursor::new(body);
     let mut zip = match ZipArchive::new(&mut reader) {
         Ok(ar) => ar,
@@ -105,7 +145,6 @@ fn entrypoint(req: &mut Request, channel: &Sender<Packet>) -> Response<Cursor<Ve
     }
 
     // act on the request
-    info!("processing request");
     let response = match REGISTRY.register(dir.path()) {
         Ok((packet, existed)) => {
             // prepare the message first
@@ -115,7 +154,7 @@ fn entrypoint(req: &mut Request, channel: &Sender<Packet>) -> Response<Cursor<Ve
                 "is scheduled for analysis"
             };
             let msg = format!(
-                "the package {}, you can check its status or result at https://{}:{}/{}",
+                "the package {}, you can check its status or result at http://{}:{}/status/{}",
                 head,
                 HOST,
                 PORT,
@@ -123,10 +162,14 @@ fn entrypoint(req: &mut Request, channel: &Sender<Packet>) -> Response<Cursor<Ve
             );
             info!("packet {}: {}", head, packet.id());
 
-            // send the packet to channel
-            match channel.send(packet) {
-                Ok(_) => make_ok(msg),
-                Err(err) => make_server_error(format!("failed to schedule analysis: {}", err)),
+            // send the packet to channel if this is a new package
+            if !existed {
+                match channel.send(packet) {
+                    Ok(_) => make_ok(msg),
+                    Err(err) => make_server_error(format!("failed to schedule analysis: {}", err)),
+                }
+            } else {
+                make_ok(msg)
             }
         }
         Err(err) => {
@@ -234,7 +277,12 @@ fn main() {
             };
 
             // process it
-            let response = entrypoint(&mut request, &c_send);
+            let response = match Action::parse(&mut request) {
+                Ok(Action::Default) => make_ok("Welcome"),
+                Ok(Action::Status(hash)) => handle_status(hash),
+                Ok(Action::Submit(body)) => handle_submit(body, &c_send),
+                Err(err) => make_sanity_error(err.to_string()),
+            };
 
             // send back response
             match request.respond(response) {
