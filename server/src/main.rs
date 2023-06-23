@@ -178,10 +178,13 @@ fn main() {
                     continue;
                 }
             };
+            info!("[worker {}] received packet: {}", i, packet.id());
 
             // process the packet
             match analyze(&REGISTRY, &packet) {
-                Ok(_) => (),
+                Ok(_) => {
+                    info!("[worker {}] packet analyzed: {}", i, packet.id());
+                }
                 Err(err) => {
                     error!(
                         "[worker {}] unexpected error when analyzing packet: {}",
