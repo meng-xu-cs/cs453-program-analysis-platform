@@ -12,7 +12,7 @@ use tempdir::TempDir;
 use tiny_http::{Method, Request, Response};
 use zip::ZipArchive;
 
-use cs453_pap_worker::packet::{Packet, Registry};
+use cs453_pap_worker::packet::{Packet, Registry, Status};
 use cs453_pap_worker::process::analyze;
 
 /// Absolute path to the `data` directory
@@ -164,6 +164,7 @@ fn handle_submit(body: Vec<u8>, channel: &Sender<Packet>) -> Response<Cursor<Vec
 
             // send the packet to channel if this is a new package
             if !existed {
+                REGISTRY.queue(packet.clone());
                 match channel.send(packet) {
                     Ok(_) => make_ok(msg),
                     Err(err) => make_server_error(format!("failed to schedule analysis: {}", err)),
@@ -199,11 +200,17 @@ fn main() {
         .init()
         .expect("unable to setup logging");
 
-    // initialize
-    info!("number of packets found: {}", REGISTRY.count());
-
     // setup channel
     let (channel_send, channel_recv) = crossbeam_channel::unbounded::<Packet>();
+
+    // initialize the registry
+    for (packet, status) in REGISTRY.snapshot() {
+        if matches!(status, Status::Received) {
+            info!("queueing packet: {}", packet.id());
+            REGISTRY.queue(packet.clone());
+            channel_send.send(packet).expect("channel");
+        }
+    }
 
     // spawn workers
     let mut worker_handles = Vec::with_capacity(NUMBER_OF_WORKERS);

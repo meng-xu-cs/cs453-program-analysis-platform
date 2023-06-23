@@ -17,7 +17,7 @@ const MAKRER_ERROR: &str = "error";
 const MAKRER_RESULT: &str = "result.json";
 
 /// Uniquely identifies a packet
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Packet {
     hash: String,
 }
@@ -40,6 +40,7 @@ pub enum Status {
 /// Registry of packets
 pub struct Registry {
     root: RwLock<PathBuf>,
+    queue: RwLock<Vec<Packet>>,
     packets: RwLock<BTreeMap<Packet, Status>>,
 }
 
@@ -63,13 +64,6 @@ impl Registry {
             let path = item.path();
             let packet = Packet { hash };
 
-            // on error
-            let path_error = path.join(MAKRER_ERROR);
-            if path_error.exists() {
-                packets.insert(packet, Status::Error);
-                continue;
-            }
-
             // on completed
             let path_result = path.join(MAKRER_RESULT);
             if path_result.exists() {
@@ -77,12 +71,19 @@ impl Registry {
                 continue;
             }
 
-            // on pending
+            // on error (re-queue the packet for analysis)
+            let path_error = path.join(MAKRER_ERROR);
+            if path_error.exists() {
+                fs::remove_file(&path_error)?;
+            }
+
+            // on received with error cleared
             packets.insert(packet, Status::Received);
         }
 
         Ok(Self {
             root: RwLock::new(root),
+            queue: RwLock::new(vec![]),
             packets: RwLock::new(packets),
         })
     }
@@ -251,10 +252,10 @@ impl Registry {
         Ok((Packet { hash }, existed))
     }
 
-    /// Report number of packets received
-    pub fn count(&self) -> usize {
+    /// Report a snapshot of all packets the registry accumulates
+    pub fn snapshot(&self) -> BTreeMap<Packet, Status> {
         let locked = self.packets.read().expect("lock");
-        locked.len()
+        locked.clone()
     }
 
     /// Prepare the workspace
@@ -314,6 +315,17 @@ impl Registry {
         Ok(dock_packet)
     }
 
+    /// Add the packet to queue
+    pub fn queue(&self, packet: Packet) {
+        let mut locked = self.queue.write().expect("lock");
+        locked.push(packet.clone());
+        drop(locked);
+
+        let mut locked = self.packets.write().expect("lock");
+        locked.insert(packet, Status::Received);
+        drop(locked);
+    }
+
     /// Save analysis result
     pub fn save_result(&self, packet: Packet, result: AnalysisResult) -> Result<()> {
         // save to filesystem
@@ -324,7 +336,12 @@ impl Registry {
 
         // mark availability
         let mut locked = self.packets.write().expect("lock");
-        locked.insert(packet, Status::Completed);
+        locked.insert(packet.clone(), Status::Completed);
+        drop(locked);
+
+        // remove it from queue
+        let mut locked = self.queue.write().expect("lock");
+        locked.retain(|p| p != &packet);
         drop(locked);
 
         // done
@@ -341,7 +358,12 @@ impl Registry {
 
         // mark availability
         let mut locked = self.packets.write().expect("lock");
-        locked.insert(packet, Status::Error);
+        locked.insert(packet.clone(), Status::Error);
+        drop(locked);
+
+        // remove it from queue
+        let mut locked = self.queue.write().expect("lock");
+        locked.retain(|p| p != &packet);
         drop(locked);
 
         // done
@@ -359,7 +381,17 @@ impl Registry {
 
         let message = match status {
             None => None,
-            Some(Status::Received) => Some("queued".to_string()),
+            Some(Status::Received) => {
+                let locked = self.queue.read().expect("lock");
+                let index = locked.iter().position(|p| p == &packet);
+                drop(locked);
+                match index {
+                    None => {
+                        bail!("unable to find packet in queue");
+                    }
+                    Some(pos) => Some(format!("queued at position {}", pos)),
+                }
+            }
             Some(Status::Completed) => {
                 let locked = self.root.read().expect("lock");
                 let path = locked.join(&packet.hash).join(MAKRER_RESULT);
