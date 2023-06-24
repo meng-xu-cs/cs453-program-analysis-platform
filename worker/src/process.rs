@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::info;
 use serde::{Deserialize, Serialize};
 
 use crate::packet::{Packet, Registry};
@@ -29,11 +30,17 @@ pub struct AnalysisResult {
 /// Analyze a packet
 pub fn analyze(registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
     let mut dock = Dock::new()?;
+
+    info!("[{}] baseline", packet.id());
     let result_baseline = run_baseline(&mut dock, registry, packet)?;
+    info!("[{}] gcov", packet.id());
     let result_gcov = run_gcov(&mut dock, registry, packet)?;
+    info!("[{}] afl++", packet.id());
     let result_aflpp = run_aflpp(&mut dock, registry, packet)?;
+    info!("[{}] klee", packet.id());
     let result_klee = run_klee(&mut dock, registry, packet)?;
 
+    info!("[{}] completed", packet.id());
     // collect and dump result
     Ok(AnalysisResult {
         result_baseline,

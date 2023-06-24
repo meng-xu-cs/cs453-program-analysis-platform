@@ -10,7 +10,7 @@ use bollard::container::{
     Config, CreateContainerOptions, ListContainersOptions, LogOutput, LogsOptions,
     RemoveContainerOptions,
 };
-use bollard::errors::Error::DockerContainerWaitError;
+use bollard::errors::Error::{DockerContainerWaitError, IOError};
 use bollard::image::{BuildImageOptions, CommitContainerOptions, RemoveImageOptions};
 use bollard::models::{HostConfig, ResourcesUlimits};
 use bollard::Docker;
@@ -262,7 +262,15 @@ impl Dock {
         };
         let mut stream = self.docker.logs::<String>(&id.0, Some(opts));
         while let Some(frame) = stream.next().await {
-            let frame = frame?;
+            // TODO: this is a hack to workaround bytes remaining problem
+            let frame = match frame {
+                Ok(frame) => frame,
+                Err(IOError { err }) if err.to_string() == "bytes remaining on stream" => {
+                    continue;
+                }
+                Err(e) => bail!(e),
+            };
+            // handle the frame
             match frame {
                 LogOutput::StdIn { message } => {
                     bail!(
