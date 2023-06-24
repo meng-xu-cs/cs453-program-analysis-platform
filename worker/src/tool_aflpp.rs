@@ -16,7 +16,7 @@ const DOCKER_TAG: &str = "afl";
 /// Default mount point for work directory
 const DOCKER_MNT: &str = "/test";
 
-/// Timeout for testcase execution
+/// Timeout for fuzzing
 const TIMEOUT_FUZZ: Duration = Duration::from_secs(60 * 15);
 
 /// Path to the build directory
@@ -33,7 +33,7 @@ pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// Result for baseline evaluation
+/// Result for AFL++ fuzzing
 #[derive(Serialize, Deserialize)]
 pub struct ResultAFLpp {
     pub completed: bool,
