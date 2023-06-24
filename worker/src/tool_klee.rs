@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,7 @@ const DOCKER_TAG: &str = "klee";
 const DOCKER_MNT: &str = "/test";
 
 /// Timeout for symbolic execution
-const TIMEOUT_EXEC: Duration = Duration::from_secs(60 * 15);
+const TIMEOUT_EXEC: Duration = Duration::from_secs(10);
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
@@ -67,7 +68,7 @@ pub fn run_klee(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
     }
 
     // symbolic exploration
-    let (_host_path_klee_out, dock_path_klee_out) = docked.wks_path("output");
+    let (host_path_klee_out, dock_path_klee_out) = docked.wks_path("output");
     let result = docker_run(
         dock,
         &docked.host_base,
@@ -89,10 +90,34 @@ pub fn run_klee(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
         });
     }
 
+    // collect statistics
+    if !host_path_klee_out.exists() {
+        bail!("unable to find the KLEE output directory on host system");
+    }
+    let mut ktests = vec![];
+    for item in fs::read_dir(&host_path_klee_out)? {
+        let item = item?;
+        let name = item.file_name();
+        if let Some(test) = name.to_str().and_then(|n| n.strip_suffix(".ktest")) {
+            ktests.push(format!("{}.", test));
+        }
+    }
+
+    let mut num_crashes = 0;
+    for item in fs::read_dir(&host_path_klee_out)? {
+        let item = item?;
+        let name = item.file_name();
+        if name.to_str().map_or(false, |n| {
+            n.ends_with(".err") && ktests.iter().any(|k| n.starts_with(k))
+        }) {
+            num_crashes += 1;
+        }
+    }
+
     // done with KLEE execution
     Ok(ResultKLEE {
         completed: true,
-        num_crashes: 0,
+        num_crashes,
     })
 }
 

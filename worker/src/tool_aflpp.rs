@@ -17,7 +17,7 @@ const DOCKER_TAG: &str = "afl";
 const DOCKER_MNT: &str = "/test";
 
 /// Timeout for fuzzing
-const TIMEOUT_FUZZ: Duration = Duration::from_secs(60 * 15);
+const TIMEOUT_FUZZ: Duration = Duration::from_secs(5);
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
