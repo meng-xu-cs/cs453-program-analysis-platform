@@ -136,14 +136,13 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
     });
 
     // wait for readiness
-    let afl_dir = host_path_symcc_out.join("afl-0");
-    let afl_dir_queue = afl_dir.join("queue");
-    while !afl_dir_queue.exists() {
+    while !host_path_symcc_out.exists() {
         if handle.is_finished() {
             bail!("AFL not started on the sideline");
         }
         thread::sleep(Duration::from_secs(1));
     }
+    thread::sleep(Duration::from_secs(1));
 
     // spawn SymCC
     let result = docker_run(
@@ -153,7 +152,7 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
             "symcc_fuzzing_helper".to_string(),
             "-v".to_string(),
             "-o".to_string(),
-            dock_path_symcc_out,
+            dock_path_symcc_out.clone(),
             "-a".to_string(),
             "afl-0".to_string(),
             "-n".to_string(),
@@ -186,7 +185,21 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
         }
     }
 
+    // enable host access to the output directory
+    docker_run(
+        dock,
+        &docked.host_base,
+        vec![
+            "chmod".to_string(),
+            "-R".to_string(),
+            "777".to_string(),
+            dock_path_symcc_out,
+        ],
+        None,
+    )?;
+
     // done with hybrid fuzzing
+    let afl_dir = host_path_symcc_out.join("afl-0");
     let afl_dir_crash = afl_dir.join("crashes");
     if !afl_dir_crash.exists() {
         bail!("unable to find the AFL crash directory on host system");
