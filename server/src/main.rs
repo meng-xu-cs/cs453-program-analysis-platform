@@ -28,7 +28,7 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
 });
 
 /// Hostname for the server
-const HOST: &str = "localhost";
+const HOST: &str = "ugster71a.student.cs.uwaterloo.ca";
 
 /// Port number for the server
 const PORT: u16 = 8000;
@@ -269,7 +269,7 @@ fn main() {
     }
 
     // bind address
-    let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
+    let addr = SocketAddr::from(([0, 0, 0, 0], PORT));
     let server = tiny_http::Server::http(addr).expect("server binding");
     info!("socket bounded");
 
@@ -294,7 +294,7 @@ fn main() {
 
             // process it
             let response = match Action::parse(&mut request) {
-                Ok(Action::Default) => make_ok("Welcome"),
+                Ok(Action::Default) => make_ok(include_str!("../asset/index.md")),
                 Ok(Action::Status(hash)) => handle_status(hash),
                 Ok(Action::Submit(body)) => handle_submit(body, &c_send),
                 Err(err) => make_sanity_error(err.to_string()),
