@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::{fs, io};
@@ -279,6 +279,11 @@ impl Registry {
             }
         }
         fs::create_dir(&host_output)?;
+
+        // set the permission
+        let mut perms = fs::metadata(&host_output)?.permissions();
+        perms.set_mode(0o777);
+        fs::set_permissions(&host_output, perms)?;
 
         // prepare the dockerized packet
         let dock_base = Path::new(mnt);
