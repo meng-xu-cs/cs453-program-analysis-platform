@@ -59,7 +59,7 @@ impl Dock {
 
     /// Create a duplicate
     pub fn duplicate(&self) -> Result<Self> {
-        Self::new(self.name.clone())
+        Self::new(format!("{}-sideline", self.name))
     }
 
     /// Query an image by its tag
@@ -560,7 +560,7 @@ impl Dock {
             cmd,
             false,
             true,
-            true,
+            false,
             Some(timeout.unwrap_or(DEFAULT_SANDBOX_TIMEOUT)),
             binding,
             workdir,
