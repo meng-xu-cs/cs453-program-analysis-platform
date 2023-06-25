@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::string::ToString;
 use std::sync::Arc;
 use std::{fs, thread};
 
@@ -10,6 +12,7 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use tempdir::TempDir;
 use tiny_http::{Method, Request, Response};
+use tinytemplate::TinyTemplate;
 use zip::ZipArchive;
 
 use cs453_pap_worker::packet::{Packet, Registry, Status};
@@ -27,8 +30,19 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
     Registry::new(path).expect("unable to initialize the registry")
 });
 
+/// The welcome message
+static WELCOME: Lazy<String> = Lazy::new(|| {
+    let mut t = TinyTemplate::new();
+    t.add_template("index", include_str!("../asset/index.md"))
+        .expect("template");
+    let mut c = BTreeMap::new();
+    c.insert("host", HOST.to_string());
+    c.insert("port", PORT.to_string());
+    t.render("index", &c).expect("template")
+});
+
 /// Hostname for the server
-const HOST: &str = "ugster71a.student.cs.uwaterloo.ca";
+const HOST: &str = "ugster71d.student.cs.uwaterloo.ca";
 
 /// Port number for the server
 const PORT: u16 = 8000;
@@ -294,7 +308,7 @@ fn main() {
 
             // process it
             let response = match Action::parse(&mut request) {
-                Ok(Action::Default) => make_ok(include_str!("../asset/index.md")),
+                Ok(Action::Default) => make_ok(WELCOME.to_string()),
                 Ok(Action::Status(hash)) => handle_status(hash),
                 Ok(Action::Submit(body)) => handle_submit(body, &c_send),
                 Err(err) => make_sanity_error(err.to_string()),
