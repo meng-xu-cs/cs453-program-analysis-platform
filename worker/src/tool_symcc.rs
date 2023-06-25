@@ -18,7 +18,7 @@ const DOCKER_TAG_BASE: &str = "symcc-base";
 const DOCKER_MNT: &str = "/test";
 
 /// Timeout for fuzzing
-const TIMEOUT_FUZZ: Duration = Duration::from_secs(5);
+const TIMEOUT_FUZZ: Duration = Duration::from_secs(60 * 15);
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {

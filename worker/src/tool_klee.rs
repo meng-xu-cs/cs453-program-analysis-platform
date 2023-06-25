@@ -17,7 +17,7 @@ const DOCKER_TAG: &str = "klee";
 const DOCKER_MNT: &str = "/test";
 
 /// Timeout for symbolic execution
-const TIMEOUT_EXEC: Duration = Duration::from_secs(10);
+const TIMEOUT_EXEC: Duration = Duration::from_secs(60 * 15);
 
 /// Path to the build directory
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
