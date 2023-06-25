@@ -5,6 +5,7 @@ use crate::packet::{Packet, Registry};
 use crate::tool_aflpp::{run_aflpp, ResultAFLpp};
 use crate::tool_gcov::{run_baseline, run_gcov, ResultBaseline, ResultGcov};
 use crate::tool_klee::{run_klee, ResultKLEE};
+use crate::tool_symcc::{run_symcc, ResultSymCC};
 use crate::util_docker::Dock;
 use crate::{tool_aflpp, tool_gcov, tool_klee, tool_symcc};
 
@@ -24,6 +25,7 @@ pub struct AnalysisResult {
     result_gcov: ResultGcov,
     result_aflpp: ResultAFLpp,
     result_klee: ResultKLEE,
+    result_symcc: ResultSymCC,
 }
 
 /// Analyze a packet
@@ -34,6 +36,7 @@ pub fn analyze(registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
     let result_gcov = run_gcov(&mut dock, registry, packet)?;
     let result_aflpp = run_aflpp(&mut dock, registry, packet)?;
     let result_klee = run_klee(&mut dock, registry, packet)?;
+    let result_symcc = run_symcc(&mut dock, registry, packet)?;
 
     // collect and dump result
     Ok(AnalysisResult {
@@ -41,5 +44,6 @@ pub fn analyze(registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
         result_gcov,
         result_aflpp,
         result_klee,
+        result_symcc,
     })
 }
