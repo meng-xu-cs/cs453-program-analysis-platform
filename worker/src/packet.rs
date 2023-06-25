@@ -400,7 +400,7 @@ impl Registry {
                     bail!("unable to find analysis result file");
                 }
                 let result: AnalysisResult = serde_json::from_reader(File::open(path)?)?;
-                Some(serde_json::to_string(&result)?)
+                Some(result.to_human_readable())
             }
             Some(Status::Error) => {
                 let locked = self.root.read().expect("lock");

@@ -44,6 +44,34 @@ pub struct ResultBaseline {
     pub crash_fail: usize,
 }
 
+impl ResultBaseline {
+    pub fn to_human_readable(&self) -> String {
+        if !self.compiled {
+            return "[failure] unable to compile the program".to_string();
+        }
+        if self.input_pass == 0 {
+            return format!(
+                "[failure] none of the {} test case(s) under 'input/' directory executes successfully",
+                self.input_pass + self.input_fail,
+            );
+        }
+        if self.input_fail != 0 {
+            return format!(
+                "[failure] {} out of {} test case(s) under 'input/' directory crash or timeout",
+                self.input_fail,
+                self.input_pass + self.input_fail
+            );
+        }
+        if self.crash_pass == 0 {
+            return format!(
+                "[failure] none of the {} test case(s) under 'crash/' directory actually crash the program",
+                self.crash_pass + self.crash_fail
+            );
+        }
+        "[success] baseline check passed".to_string()
+    }
+}
+
 /// Run user-provided test cases
 pub fn run_baseline(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultBaseline> {
     let docked = registry.mk_dockerized_packet(packet, "baseline", DOCKER_MNT)?;
@@ -128,6 +156,21 @@ pub struct ResultGcov {
     pub completed: bool,
     pub num_blocks: u64,
     pub cov_blocks: u64,
+}
+
+impl ResultGcov {
+    pub fn to_human_readable(&self) -> String {
+        if !self.completed {
+            return "[failure] unable to complete GCOV measurement".to_string();
+        }
+        if self.num_blocks > self.cov_blocks {
+            return format!(
+                "[failure] GCOV coverage at {:.2}%",
+                (self.cov_blocks as f64) / (self.num_blocks as f64) * 100.0
+            );
+        }
+        "[success] 100% GCOV coverage".to_string()
+    }
 }
 
 pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultGcov> {

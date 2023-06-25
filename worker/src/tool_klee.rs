@@ -40,6 +40,18 @@ pub struct ResultKLEE {
     pub num_crashes: u64,
 }
 
+impl ResultKLEE {
+    pub fn to_human_readable(&self) -> String {
+        if !self.completed {
+            return "[failure] unable to complete KLEE symbolic execution".to_string();
+        }
+        if self.num_crashes != 0 {
+            return format!("[failure] KLEE found {} crashes", self.num_crashes);
+        }
+        "[success] KLEE found no crashes".to_string()
+    }
+}
+
 pub fn run_klee(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultKLEE> {
     let docked = registry.mk_dockerized_packet(packet, "klee", DOCKER_MNT)?;
 

@@ -28,6 +28,29 @@ pub struct AnalysisResult {
     result_symcc: ResultSymCC,
 }
 
+impl AnalysisResult {
+    pub fn to_human_readable(&self) -> String {
+        vec![
+            "==== Baseline ====".to_string(),
+            self.result_baseline.to_human_readable(),
+            String::new(),
+            "==== GCOV ====".to_string(),
+            self.result_gcov.to_human_readable(),
+            String::new(),
+            "==== AFL++ ====".to_string(),
+            self.result_aflpp.to_human_readable(),
+            String::new(),
+            "==== KLEE ====".to_string(),
+            self.result_klee.to_human_readable(),
+            String::new(),
+            "==== SymCC ====".to_string(),
+            self.result_symcc.to_human_readable(),
+            String::new(),
+        ]
+        .join("\n")
+    }
+}
+
 /// Analyze a packet
 pub fn analyze(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
     let result_baseline = run_baseline(dock, registry, packet)?;

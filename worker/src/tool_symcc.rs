@@ -55,6 +55,18 @@ pub struct ResultSymCC {
     pub num_crashes: u64,
 }
 
+impl ResultSymCC {
+    pub fn to_human_readable(&self) -> String {
+        if !self.completed {
+            return "[failure] unable to complete SymCC concolic execution".to_string();
+        }
+        if self.num_crashes != 0 {
+            return format!("[failure] SymCC found {} crashes", self.num_crashes);
+        }
+        "[success] SymCC found no crashes".to_string()
+    }
+}
+
 pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultSymCC> {
     let docked = registry.mk_dockerized_packet(packet, "symcc", DOCKER_MNT)?;
 
