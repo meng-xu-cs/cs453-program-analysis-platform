@@ -29,7 +29,7 @@ static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// Provision the GCOV tool
-pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
+pub fn provision(dock: &Dock, force: bool) -> Result<()> {
     dock.build(DOCKER_PATH.as_path(), DOCKER_TAG, force)?;
     Ok(())
 }
@@ -45,11 +45,7 @@ pub struct ResultBaseline {
 }
 
 /// Run user-provided test cases
-pub fn run_baseline(
-    dock: &mut Dock,
-    registry: &Registry,
-    packet: &Packet,
-) -> Result<ResultBaseline> {
+pub fn run_baseline(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultBaseline> {
     let docked = registry.mk_dockerized_packet(packet, "baseline", DOCKER_MNT)?;
 
     // compile the program
@@ -134,7 +130,7 @@ pub struct ResultGcov {
     pub cov_blocks: u64,
 }
 
-pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result<ResultGcov> {
+pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultGcov> {
     let docked = registry.mk_dockerized_packet(packet, "gcov", DOCKER_MNT)?;
 
     // compile the program
@@ -218,7 +214,7 @@ pub fn run_gcov(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result
 
 /// Utility helper on invoking this Docker image
 fn docker_run(
-    dock: &mut Dock,
+    dock: &Dock,
     base: &Path,
     cmd: Vec<String>,
     timeout: Option<Duration>,

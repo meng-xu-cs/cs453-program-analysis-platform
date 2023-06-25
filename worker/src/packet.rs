@@ -332,7 +332,7 @@ impl Registry {
         let locked = self.root.read().expect("lock");
         let path = locked.join(&packet.hash).join(MARKER_RESULT);
         drop(locked);
-        serde_json::to_writer(File::create(path)?, &result)?;
+        serde_json::to_writer_pretty(File::create(path)?, &result)?;
 
         // mark availability
         let mut locked = self.packets.write().expect("lock");

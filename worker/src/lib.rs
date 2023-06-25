@@ -1,4 +1,4 @@
-pub(crate) mod util_docker;
+pub mod util_docker;
 
 pub(crate) mod tool_aflpp;
 pub(crate) mod tool_gcov;

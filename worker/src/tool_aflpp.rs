@@ -28,7 +28,7 @@ static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// Provision the AFL++ tool
-pub fn provision(dock: &mut Dock, force: bool) -> Result<()> {
+pub fn provision(dock: &Dock, force: bool) -> Result<()> {
     dock.build(DOCKER_PATH.as_path(), DOCKER_TAG, force)?;
     Ok(())
 }
@@ -40,7 +40,7 @@ pub struct ResultAFLpp {
     pub num_crashes: u64,
 }
 
-pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Result<ResultAFLpp> {
+pub fn run_aflpp(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<ResultAFLpp> {
     let docked = registry.mk_dockerized_packet(packet, "aflpp", DOCKER_MNT)?;
 
     // compile the program
@@ -126,7 +126,7 @@ pub fn run_aflpp(dock: &mut Dock, registry: &Registry, packet: &Packet) -> Resul
 
 /// Utility helper on invoking this Docker image
 fn docker_run(
-    dock: &mut Dock,
+    dock: &Dock,
     base: &Path,
     cmd: Vec<String>,
     timeout: Option<Duration>,

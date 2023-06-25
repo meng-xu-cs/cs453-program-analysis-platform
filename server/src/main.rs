@@ -14,6 +14,7 @@ use zip::ZipArchive;
 
 use cs453_pap_worker::packet::{Packet, Registry, Status};
 use cs453_pap_worker::process::analyze;
+use cs453_pap_worker::util_docker::Dock;
 
 /// Absolute path to the `data` directory
 static REGISTRY: Lazy<Registry> = Lazy::new(|| {
@@ -219,43 +220,48 @@ fn main() {
     let mut worker_handles = Vec::with_capacity(NUMBER_OF_WORKERS);
     for i in 0..NUMBER_OF_WORKERS {
         let c_recv = channel_recv.clone();
-        let handle = thread::spawn(move || loop {
-            // wait for packet
-            let packet = match c_recv.recv() {
-                Ok(pkt) => pkt,
-                Err(err) => {
-                    error!(
-                        "[worker {}] unexpected error when receiving packets: {}",
-                        i, err
-                    );
-                    continue;
-                }
-            };
-            let hash = packet.id().to_string();
-            info!("[worker {}] received packet: {}", i, hash);
+        let handle = thread::spawn(move || {
+            // init docker
+            let dock = Dock::new(format!("worker-{}", i)).expect("docker");
 
-            // process the packet
-            match analyze(&REGISTRY, &packet) {
-                Ok(result) => {
-                    match REGISTRY.save_result(packet, result) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            error!("[worker {}] failed to save analysis result: {}", i, e);
-                        }
-                    };
-                    info!("[worker {}] packet analyzed: {}", i, hash);
-                }
-                Err(err) => {
-                    error!(
-                        "[worker {}] unexpected error when analyzing packet: {}",
-                        i, err
-                    );
-                    match REGISTRY.save_error(packet, err.to_string()) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            error!("[worker {}] failed to save analysis error: {}", i, e);
-                        }
-                    };
+            loop {
+                // wait for packet
+                let packet = match c_recv.recv() {
+                    Ok(pkt) => pkt,
+                    Err(err) => {
+                        error!(
+                            "[worker {}] unexpected error when receiving packets: {}",
+                            i, err
+                        );
+                        continue;
+                    }
+                };
+                let hash = packet.id().to_string();
+                info!("[worker {}] received packet: {}", i, hash);
+
+                // process the packet
+                match analyze(&dock, &REGISTRY, &packet) {
+                    Ok(result) => {
+                        match REGISTRY.save_result(packet, result) {
+                            Ok(_) => (),
+                            Err(e) => {
+                                error!("[worker {}] failed to save analysis result: {}", i, e);
+                            }
+                        };
+                        info!("[worker {}] packet analyzed: {}", i, hash);
+                    }
+                    Err(err) => {
+                        error!(
+                            "[worker {}] unexpected error when analyzing packet: {}",
+                            i, err
+                        );
+                        match REGISTRY.save_error(packet, err.to_string()) {
+                            Ok(_) => (),
+                            Err(e) => {
+                                error!("[worker {}] failed to save analysis error: {}", i, e);
+                            }
+                        };
+                    }
                 }
             }
         });

@@ -11,11 +11,11 @@ use crate::{tool_aflpp, tool_gcov, tool_klee, tool_symcc};
 
 /// Provision all the tools
 pub fn provision(force: bool) -> Result<()> {
-    let mut dock = Dock::new()?;
-    tool_gcov::provision(&mut dock, force)?;
-    tool_aflpp::provision(&mut dock, force)?;
-    tool_klee::provision(&mut dock, force)?;
-    tool_symcc::provision(&mut dock, force)?;
+    let dock = Dock::new("provision".to_string())?;
+    tool_gcov::provision(&dock, force)?;
+    tool_aflpp::provision(&dock, force)?;
+    tool_klee::provision(&dock, force)?;
+    tool_symcc::provision(&dock, force)?;
     Ok(())
 }
 
@@ -29,14 +29,12 @@ pub struct AnalysisResult {
 }
 
 /// Analyze a packet
-pub fn analyze(registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
-    let mut dock = Dock::new()?;
-
-    let result_baseline = run_baseline(&mut dock, registry, packet)?;
-    let result_gcov = run_gcov(&mut dock, registry, packet)?;
-    let result_aflpp = run_aflpp(&mut dock, registry, packet)?;
-    let result_klee = run_klee(&mut dock, registry, packet)?;
-    let result_symcc = run_symcc(&mut dock, registry, packet)?;
+pub fn analyze(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<AnalysisResult> {
+    let result_baseline = run_baseline(dock, registry, packet)?;
+    let result_gcov = run_gcov(dock, registry, packet)?;
+    let result_aflpp = run_aflpp(dock, registry, packet)?;
+    let result_klee = run_klee(dock, registry, packet)?;
+    let result_symcc = run_symcc(dock, registry, packet)?;
 
     // collect and dump result
     Ok(AnalysisResult {

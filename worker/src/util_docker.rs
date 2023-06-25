@@ -44,15 +44,22 @@ fn wait_for<F: Future>(future: F) -> F::Output {
 
 /// An encapsulation of the Docker command line
 pub struct Dock {
+    name: String,
     docker: Docker,
 }
 
 impl Dock {
     /// Create a new Docker manager
-    pub fn new() -> Result<Self> {
+    pub fn new(name: String) -> Result<Self> {
         Ok(Self {
+            name,
             docker: Docker::connect_with_socket_defaults()?,
         })
+    }
+
+    /// Create a duplicate
+    pub fn duplicate(&self) -> Result<Self> {
+        Self::new(self.name.clone())
     }
 
     /// Query an image by its tag
@@ -79,7 +86,7 @@ impl Dock {
     }
 
     /// Delete an image together with its associated containers
-    fn del_image(&mut self, id: &ImageID) -> Result<()> {
+    fn del_image(&self, id: &ImageID) -> Result<()> {
         // delete associated containers first
         let mut candidates = vec![];
         let opts = ListContainersOptions::<String> {
@@ -151,7 +158,7 @@ impl Dock {
     }
 
     /// Delete a container, stop it first if still running
-    fn del_container(&mut self, id: &ContainerID) -> Result<()> {
+    fn del_container(&self, id: &ContainerID) -> Result<()> {
         let opts = RemoveContainerOptions {
             force: true,
             v: true,
@@ -163,7 +170,7 @@ impl Dock {
     }
 
     /// Build an image from a Dockerfile
-    async fn _build_async(&mut self, path: &Path, tag: &str) -> Result<()> {
+    async fn _build_async(&self, path: &Path, tag: &str) -> Result<()> {
         // context tarball
         let tx = MemFile::create_default(tag)?;
 
@@ -215,7 +222,7 @@ impl Dock {
     }
 
     /// Build an image from a Dockerfile, delete or reuse previous image depending on flag
-    pub fn build(&mut self, path: &Path, tag: &str, force: bool) -> Result<()> {
+    pub fn build(&self, path: &Path, tag: &str, force: bool) -> Result<()> {
         // preparation
         match self.get_image(tag)? {
             None => (),
@@ -247,7 +254,7 @@ impl Dock {
 
     /// Run a container
     async fn _exec_async(
-        &mut self,
+        &self,
         id: &ContainerID,
         console: bool,
         timeout: Option<Duration>,
@@ -354,7 +361,7 @@ impl Dock {
     /// Run a container based on an image file
     #[allow(clippy::too_many_arguments)]
     fn _run(
-        &mut self,
+        &self,
         tag: &str,
         name: Option<String>,
         cmd: Vec<String>,
@@ -366,7 +373,7 @@ impl Dock {
         workdir: Option<String>,
     ) -> Result<ExitStatus> {
         // check container existence
-        let ephemeral_name = format!("{}-ephemeral", tag);
+        let ephemeral_name = format!("{}-ephemeral-{}", tag, self.name);
         if let Some(id) = self.get_container(&ephemeral_name)? {
             bail!(
                 "docker container \"{}\" already exists with name \"{}\"",
@@ -482,7 +489,7 @@ impl Dock {
     /// Run a container based on an image file and commit it back
     #[allow(clippy::too_many_arguments)]
     pub fn commit(
-        &mut self,
+        &self,
         tag: &str,
         name: &str,
         cmd: Vec<String>,
@@ -526,7 +533,7 @@ impl Dock {
     /// Invoke a simple command on a container and discard it
     #[allow(clippy::too_many_arguments)]
     fn invoke(
-        &mut self,
+        &self,
         tag: &str,
         cmd: Vec<String>,
         net: bool,
@@ -541,7 +548,7 @@ impl Dock {
 
     /// Invoke a simple command on a container in sandboxed environment and discard it
     pub fn sandbox(
-        &mut self,
+        &self,
         tag: &str,
         cmd: Vec<String>,
         timeout: Option<Duration>,
@@ -553,7 +560,7 @@ impl Dock {
             cmd,
             false,
             true,
-            false,
+            true,
             Some(timeout.unwrap_or(DEFAULT_SANDBOX_TIMEOUT)),
             binding,
             workdir,
