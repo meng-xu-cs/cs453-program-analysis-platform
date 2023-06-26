@@ -129,6 +129,10 @@ impl Registry {
                             fs::remove_file(item.path())?;
                             continue;
                         }
+                        if n.starts_with(".gitignore") && ty.is_file() {
+                            fs::remove_file(item.path())?;
+                            continue;
+                        }
                         if n.starts_with("output") && ty.is_dir() {
                             fs::remove_dir_all(item.path())?;
                             continue;
