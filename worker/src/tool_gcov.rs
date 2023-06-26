@@ -154,8 +154,8 @@ pub fn run_baseline(dock: &Dock, registry: &Registry, packet: &Packet) -> Result
 #[derive(Serialize, Deserialize)]
 pub struct ResultGcov {
     pub completed: bool,
-    pub num_blocks: u64,
-    pub cov_blocks: u64,
+    pub num_blocks: usize,
+    pub cov_blocks: usize,
 }
 
 impl ResultGcov {
@@ -223,7 +223,7 @@ pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "bash".to_string(),
             "-c".to_string(),
             format!(
-                "gcov -o {} -n main.c -j -t > {}",
+                "gcov -a -b -o {} -n main.c -j -t > {}",
                 docked.path_output, dock_path_gcov_report
             ),
         ],
@@ -267,16 +267,45 @@ fn docker_run(
     dock.sandbox(DOCKER_TAG, cmd, timeout, binding, None)
 }
 
-fn parse_gcov_json_report(v: &Value) -> Option<(u64, u64)> {
-    let mut num_blocks = 0;
-    let mut cov_blocks = 0;
+fn parse_gcov_json_report(v: &Value) -> Option<(usize, usize)> {
+    let mut total_num_blocks = 0;
+    let mut total_cov_blocks = 0;
+
     let report = v.as_object()?;
     for item_file in report.get("files")?.as_array()? {
-        for item_func in item_file.as_object()?.get("functions")?.as_array()? {
+        let item_file = item_file.as_object()?;
+
+        let mut stats = BTreeMap::new();
+        for item_func in item_file.get("functions")?.as_array()? {
             let item_func = item_func.as_object()?;
-            num_blocks += item_func.get("blocks")?.as_u64()?;
-            cov_blocks += item_func.get("blocks_executed")?.as_u64()?;
+            let item_name = item_func.get("name")?.as_str()?;
+            let item_num_blocks = item_func.get("blocks")?.as_u64()? as usize;
+            let item_cov_blocks = item_func.get("blocks_executed")?.as_u64()? as usize;
+            stats.insert(item_name, (item_num_blocks, item_cov_blocks));
+        }
+
+        for item_line in item_file.get("lines")?.as_array()? {
+            let item_line = item_line.as_object()?;
+            let item_interesting = item_line.get("unexecuted_block")?.as_bool()?;
+            if item_interesting {
+                let item_func_name = item_line.get("function_name")?.as_str()?;
+                let (_, cov_block) = stats.get_mut(item_func_name)?;
+                for item_branch in item_line.get("branches")?.as_array()? {
+                    let item_branch = item_branch.as_object()?;
+                    let item_count = item_branch.get("count")?.as_u64()?;
+                    if item_count == 0 {
+                        *cov_block += 1;
+                    }
+                }
+            }
+        }
+
+        // aggregate the result
+        for (num_blocks, cov_blocks) in stats.values() {
+            total_num_blocks += *num_blocks;
+            total_cov_blocks += *cov_blocks;
         }
     }
-    Some((num_blocks, cov_blocks))
+
+    Some((total_num_blocks, total_cov_blocks))
 }

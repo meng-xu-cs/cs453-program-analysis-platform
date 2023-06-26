@@ -88,6 +88,8 @@ pub fn run_klee(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "klee".to_string(),
             "--libc=klee".to_string(),
             "--posix-runtime".to_string(),
+            "--debug-print-instructions=compact:stderr".to_string(),
+            "--max-time=15min".to_string(),
             format!("--output-dir={}", dock_path_klee_out),
             dock_path_bc,
             "-sym-stdin".to_string(),
