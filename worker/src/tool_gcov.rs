@@ -301,21 +301,18 @@ fn parse_gcov_json_report(v: &Value) -> Option<(usize, usize)> {
 
         for item_line in item_file.get("lines")?.as_array()? {
             let item_line = item_line.as_object()?;
-            let item_interesting = item_line.get("unexecuted_block")?.as_bool()?;
-            if item_interesting {
-                let item_func_name = match item_line.get("function_name") {
-                    None => {
-                        continue;
-                    }
-                    Some(v) => v.as_str()?,
-                };
-                let (_, cov_block) = stats.get_mut(item_func_name)?;
-                for item_branch in item_line.get("branches")?.as_array()? {
-                    let item_branch = item_branch.as_object()?;
-                    let item_count = item_branch.get("count")?.as_u64()?;
-                    if item_count == 0 {
-                        *cov_block += 1;
-                    }
+            let item_func_name = match item_line.get("function_name") {
+                None => {
+                    continue;
+                }
+                Some(v) => v.as_str()?,
+            };
+            let (_, cov_block) = stats.get_mut(item_func_name)?;
+            for item_branch in item_line.get("branches")?.as_array()? {
+                let item_branch = item_branch.as_object()?;
+                let item_count = item_branch.get("count")?.as_u64()?;
+                if item_count == 0 {
+                    *cov_block += 1;
                 }
             }
         }
