@@ -6,6 +6,7 @@ use std::sync::RwLock;
 use std::{fs, io};
 
 use anyhow::{anyhow, bail, Result};
+use log::info;
 use sha3::{Digest, Sha3_256};
 
 use crate::process::AnalysisResult;
@@ -78,6 +79,7 @@ impl Registry {
             }
 
             // on received or on error and with error cleared
+            info!("Cleaning up {:?}", path);
             let path_output = path.join("output");
             fs::remove_dir_all(&path_output)?;
             fs::create_dir_all(&path_output)?;
