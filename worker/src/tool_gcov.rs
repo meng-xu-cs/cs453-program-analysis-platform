@@ -109,7 +109,12 @@ pub fn run_baseline(dock: &Dock, registry: &Registry, packet: &Packet) -> Result
             vec![
                 "bash".to_string(),
                 "-c".to_string(),
-                format!("{} < {}", dock_path_compiled, test),
+                format!(
+                    "timeout {} {} < {}",
+                    TIMEOUT_TEST_CASE.as_secs(),
+                    dock_path_compiled,
+                    test
+                ),
             ],
             Some(TIMEOUT_TEST_CASE),
         )?;
@@ -129,7 +134,12 @@ pub fn run_baseline(dock: &Dock, registry: &Registry, packet: &Packet) -> Result
             vec![
                 "bash".to_string(),
                 "-c".to_string(),
-                format!("{} < {}", dock_path_compiled, test),
+                format!(
+                    "timeout {} {} < {}",
+                    TIMEOUT_TEST_CASE.as_secs(),
+                    dock_path_compiled,
+                    test
+                ),
             ],
             Some(TIMEOUT_TEST_CASE),
         )?;
@@ -208,7 +218,12 @@ pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             vec![
                 "bash".to_string(),
                 "-c".to_string(),
-                format!("{} < {}", dock_path_compiled, test),
+                format!(
+                    "timeout {} {} < {}",
+                    TIMEOUT_TEST_CASE.as_secs(),
+                    dock_path_compiled,
+                    test
+                ),
             ],
             None,
         )?;
@@ -288,7 +303,12 @@ fn parse_gcov_json_report(v: &Value) -> Option<(usize, usize)> {
             let item_line = item_line.as_object()?;
             let item_interesting = item_line.get("unexecuted_block")?.as_bool()?;
             if item_interesting {
-                let item_func_name = item_line.get("function_name")?.as_str()?;
+                let item_func_name = match item_line.get("function_name") {
+                    None => {
+                        continue;
+                    }
+                    Some(v) => v.as_str()?,
+                };
                 let (_, cov_block) = stats.get_mut(item_func_name)?;
                 for item_branch in item_line.get("branches")?.as_array()? {
                     let item_branch = item_branch.as_object()?;

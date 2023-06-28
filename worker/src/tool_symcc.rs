@@ -122,6 +122,8 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
             &side_base,
             vec![
                 "/afl/afl-fuzz".to_string(),
+                "-t".to_string(),
+                format!("{}+", 15 * 1000),
                 "-M".to_string(),
                 "afl-0".to_string(),
                 "-i".to_string(),
@@ -142,7 +144,8 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
         }
         thread::sleep(Duration::from_secs(1));
     }
-    thread::sleep(Duration::from_secs(1));
+    // wait for the completion of at least one test case
+    thread::sleep(Duration::from_secs(15));
 
     // spawn SymCC
     let result = docker_run(
