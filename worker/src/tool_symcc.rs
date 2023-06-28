@@ -152,6 +152,8 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
         dock,
         &docked.host_base,
         vec![
+            "timeout".to_string(),
+            (TIMEOUT_FUZZ.as_secs() + 15).to_string(),
             "symcc_fuzzing_helper".to_string(),
             "-v".to_string(),
             "-o".to_string(),
@@ -165,7 +167,7 @@ pub fn run_symcc(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Re
         ],
         Some(TIMEOUT_FUZZ),
     )?;
-    if !matches!(result, ExitStatus::Timeout) {
+    if matches!(result, ExitStatus::Success) {
         return Ok(ResultSymCC {
             completed: false,
             num_crashes: 0,
