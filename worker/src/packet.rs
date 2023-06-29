@@ -265,8 +265,15 @@ impl Registry {
             copy_dir_recursive(base, &root)?;
 
             // overwrite the interface file
+            let path = root.join("interface.h");
             let content = include_bytes!("../asset/interface.h");
-            fs::write(root.join("interface.h"), content)?;
+            fs::write(&path, content)?;
+
+            // - tweak permission
+            let meta = path.metadata()?;
+            let mut perm = meta.permissions();
+            perm.set_mode(0o644);
+            fs::set_permissions(&path, perm)?;
 
             // create an output directory
             let output = root.join("output");
