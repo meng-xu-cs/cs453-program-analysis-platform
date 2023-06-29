@@ -156,11 +156,17 @@ impl Registry {
         if !(program.exists() && program.is_file()) {
             bail!("main.c is missing");
         }
-        let size = program.metadata()?.size();
+        // - check size
+        let meta = program.metadata()?;
+        let size = meta.size();
         if size > 256 * 1024 {
             bail!("main.c is too big");
         }
-
+        // - tweak permission
+        let mut perm = meta.permissions();
+        perm.set_mode(0o644);
+        fs::set_permissions(&program, perm)?;
+        // - update hash
         hasher.update(b"program");
         let mut file = File::open(&program)?;
         io::copy(&mut file, &mut hasher)?;
@@ -185,13 +191,18 @@ impl Registry {
             input_tests.push(item_path);
         }
         for (i, item_path) in input_tests.into_iter().enumerate() {
-            // hash the input
+            // - hash the input
             hasher.update(b"input");
             hasher.update(i.to_ne_bytes());
             let mut file = File::open(&item_path)?;
             io::copy(&mut file, &mut hasher)?;
             drop(file);
-            // rename the test file
+            // - tweak permission
+            let meta = item_path.metadata()?;
+            let mut perm = meta.permissions();
+            perm.set_mode(0o644);
+            fs::set_permissions(&item_path, perm)?;
+            // - rename the test file
             fs::rename(&item_path, item_path.with_file_name(i.to_string()))?;
         }
 
@@ -215,13 +226,18 @@ impl Registry {
             input_crash.push(item_path);
         }
         for (i, item_path) in input_crash.into_iter().enumerate() {
-            // hash the input
+            // - hash the input
             hasher.update(b"crash");
             hasher.update(i.to_ne_bytes());
             let mut file = File::open(&item_path)?;
             io::copy(&mut file, &mut hasher)?;
             drop(file);
-            // rename the test file
+            // - tweak permission
+            let meta = item_path.metadata()?;
+            let mut perm = meta.permissions();
+            perm.set_mode(0o644);
+            fs::set_permissions(&item_path, perm)?;
+            // - rename the test file
             fs::rename(&item_path, item_path.with_file_name(i.to_string()))?;
         }
 
