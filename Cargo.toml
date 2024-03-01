@@ -3,3 +3,4 @@ members = [
     "server",
     "worker",
 ]
+resolver = "2"
