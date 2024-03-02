@@ -13,14 +13,18 @@ sudo apt-get install -y \
   virtualbox vagrant
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-# install docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-rm get-docker.sh
+# install docker (if not installed yet)
+if [ $(getent group docker) ]; then
+  echo "skip docker installation"
+else
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sudo sh get-docker.sh
+  rm get-docker.sh
 
-sudo usermod -aG docker "$USER"
-newgrp docker
-docker run hello-world
+  sudo usermod -aG docker "$USER"
+  newgrp docker
+  docker run hello-world
+fi
 
 # build all necessary docker images
 cd "$BASE_DIR/worker"
