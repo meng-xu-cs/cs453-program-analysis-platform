@@ -30,6 +30,8 @@ static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
 
 /// Provision the SymCC tool
 pub fn provision(dock: &Dock, force: bool) -> Result<()> {
+    // preparation
+    dock.remove_if_exists(DOCKER_TAG)?;
     dock.build(DOCKER_PATH.as_path(), DOCKER_TAG_BASE, force)?;
     dock.commit(
         DOCKER_TAG_BASE,

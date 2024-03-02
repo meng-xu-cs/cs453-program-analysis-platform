@@ -252,6 +252,15 @@ impl Dock {
         Ok(())
     }
 
+    /// Remove an already existing image
+    pub fn remove_if_exists(&self, tag: &str) -> Result<()> {
+        match self.get_image(tag)? {
+            None => (),
+            Some(id) => self.del_image(&id)?,
+        }
+        Ok(())
+    }
+
     /// Run a container
     async fn _exec_async(
         &self,
