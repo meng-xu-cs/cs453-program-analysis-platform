@@ -42,7 +42,7 @@ static WELCOME: Lazy<String> = Lazy::new(|| {
 });
 
 /// Hostname for the server
-const HOST: &str = "ugster71d.student.cs.uwaterloo.ca";
+const HOST: &str = "ugster72c.student.cs.uwaterloo.ca";
 
 /// Port number for the server
 const PORT: u16 = 8000;
