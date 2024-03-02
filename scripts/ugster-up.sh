@@ -1,7 +1,8 @@
 #!/bin/bash -e
 
 # paths
-SCRIPT_DIR=$(dirname "$0")
+SCRIPT_FILE=$(realpath "$0")
+SCRIPT_DIR=$(dirname "$SCRIPT_FILE")
 BASE_DIR=$(dirname "$SCRIPT_DIR")
 
 # install packages
