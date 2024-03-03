@@ -28,9 +28,14 @@ fi
 sudo apt-get purge -y apport
 sudo sysctl -w kernel.core_pattern=core.%e.%p
 
+# refresh shell
+source ~/.profile
+
 # build all necessary docker images
 cd "$BASE_DIR/worker"
+newgrp docker <<BUILD
 cargo run
+BUILD
 cd -
 
 # all set!
