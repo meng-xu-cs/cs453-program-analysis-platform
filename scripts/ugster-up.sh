@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# settings
+export DEBIAN_FRONTEND=noninteractive
+
 # paths
 SCRIPT_FILE=$(realpath "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_FILE")
