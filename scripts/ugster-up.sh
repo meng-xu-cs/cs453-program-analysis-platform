@@ -2,8 +2,9 @@
 
 # settings
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
 
-# paths
+# path
 SCRIPT_FILE=$(realpath "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_FILE")
 BASE_DIR=$(dirname "$SCRIPT_DIR")
