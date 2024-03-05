@@ -30,6 +30,10 @@ fi
 sudo apt-get purge -y apport
 sudo sysctl -w kernel.core_pattern=core.%e.%p
 
+cd /sys/devices/system/cpu
+echo performance | sudo tee cpu*/cpufreq/scaling_governor
+cd -
+
 # refresh shell
 source ~/.profile
 
