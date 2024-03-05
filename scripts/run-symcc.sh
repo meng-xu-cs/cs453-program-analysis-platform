@@ -13,7 +13,7 @@ CMD=$(cat <<END
     rm -rf ${WKS} && mkdir ${WKS} &&
     /afl/afl-clang main.c -o ${WKS}/main-afl &&
     symcc main.c -o ${WKS}/main-sym &&
-    screen -dmS afl -- \
+    AFL_SKIP_CPUFREQ=1 screen -dmS afl -- \
         /afl/afl-fuzz -M afl-0 -i input -o ${WKS}/output -- ${WKS}/main-afl &&
     while [ ! -d "${WKS}/output" ]; do sleep 1; done &&
     symcc_fuzzing_helper -v -o ${WKS}/output -a afl-0 -n symcc -- ${WKS}/main-sym
