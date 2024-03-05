@@ -28,7 +28,7 @@ fi
 
 # tweak settings
 sudo apt-get purge -y apport
-sudo echo core >/proc/sys/kernel/core_pattern
+sudo sysctl -w kernel.core_pattern=core.%e.%p
 
 cd /sys/devices/system/cpu
 echo performance | sudo tee cpu*/cpufreq/scaling_governor
