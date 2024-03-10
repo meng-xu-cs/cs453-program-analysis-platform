@@ -89,7 +89,7 @@ pub fn run_klee(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "--libc=klee".to_string(),
             "--posix-runtime".to_string(),
             "--debug-print-instructions=compact:stderr".to_string(),
-            "--max-tests=65536".to_string(),
+            "--max-solver-time=15min".to_string(),
             "--max-time=16min".to_string(),
             "--watchdog".to_string(),
             "--exit-on-error".to_string(),
