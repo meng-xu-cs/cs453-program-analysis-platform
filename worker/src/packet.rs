@@ -190,6 +190,7 @@ impl Registry {
             }
             input_tests.push(item_path);
         }
+        input_tests.sort();
         for (i, item_path) in input_tests.into_iter().enumerate() {
             // - hash the input
             hasher.update(b"input");
@@ -225,6 +226,7 @@ impl Registry {
             }
             input_crash.push(item_path);
         }
+        input_crash.sort();
         for (i, item_path) in input_crash.into_iter().enumerate() {
             // - hash the input
             hasher.update(b"crash");

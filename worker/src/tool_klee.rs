@@ -92,7 +92,6 @@ pub fn run_klee(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "--max-solver-time=15min".to_string(),
             "--max-time=16min".to_string(),
             "--watchdog".to_string(),
-            "--exit-on-error".to_string(),
             format!("--output-dir={}", dock_path_klee_out),
             dock_path_bc,
             "-sym-stdin".to_string(),
