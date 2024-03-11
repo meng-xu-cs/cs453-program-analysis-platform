@@ -278,39 +278,38 @@ impl Dock {
         };
         let mut stream = self.docker.logs::<String>(&id.0, Some(opts));
         while let Some(frame) = stream.next().await {
-            // TODO: this is a hack to workaround bytes remaining problem
-            let frame = match frame {
-                Ok(frame) => frame,
-                Err(IOError { err }) if err.to_string() == "bytes remaining on stream" => {
-                    continue;
+            match frame {
+                Ok(frame) => {
+                    // handle the frame
+                    match frame {
+                        LogOutput::StdIn { message } => {
+                            bail!(
+                                "unexpected message to stdin: {}",
+                                String::from_utf8(message.to_vec())
+                                    .unwrap_or_else(|_| "<not-utf8-string>".to_string())
+                            );
+                        }
+                        LogOutput::StdOut { message } => {
+                            if console {
+                                io::stdout().write_all(&message)?;
+                            }
+                        }
+                        LogOutput::StdErr { message } => {
+                            if console {
+                                io::stderr().write_all(&message)?;
+                            }
+                        }
+                        LogOutput::Console { message } => {
+                            if console {
+                                io::stdout().write_all(&message)?;
+                            }
+                        }
+                    }
                 }
+                // TODO: this is a hack to workaround bytes remaining problem
+                Err(IOError { err }) if err.to_string() == "bytes remaining on stream" => (),
                 Err(e) => bail!(e),
             };
-            // handle the frame
-            match frame {
-                LogOutput::StdIn { message } => {
-                    bail!(
-                        "unexpected message to stdin: {}",
-                        String::from_utf8(message.to_vec())
-                            .unwrap_or_else(|_| "<not-utf8-string>".to_string())
-                    );
-                }
-                LogOutput::StdOut { message } => {
-                    if console {
-                        io::stdout().write_all(&message)?;
-                    }
-                }
-                LogOutput::StdErr { message } => {
-                    if console {
-                        io::stderr().write_all(&message)?;
-                    }
-                }
-                LogOutput::Console { message } => {
-                    if console {
-                        io::stdout().write_all(&message)?;
-                    }
-                }
-            }
 
             // check timeout
             match timeout.as_ref() {
