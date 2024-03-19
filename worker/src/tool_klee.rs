@@ -125,7 +125,8 @@ pub fn run_klee(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
         let item = item?;
         let name = item.file_name();
         if name.to_str().map_or(false, |n| {
-            n.ends_with(".err") && ktests.iter().any(|k| n.starts_with(k))
+            (n.ends_with(".err") || n.ends_with(".early"))
+                && ktests.iter().any(|k| n.starts_with(k))
         }) {
             num_crashes += 1;
         }
