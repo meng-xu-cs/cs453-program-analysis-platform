@@ -8,22 +8,22 @@ edition = "2021"
 
 [dependencies]
 # logging
-log = "0.4.21"
+log = "0.4.22"
 stderrlog = "0.6.0"
 # utilities
-anyhow = "1.0.80"
-once_cell = "1.19.0"
+anyhow = "1.0.91"
+once_cell = "1.20.2"
 # async
-futures-util = "0.3.30"
-tokio = "1.36.0"
+futures-util = "0.3.31"
+tokio = "1.41.0"
 # filesystem
 memfile = "0.3.2"
-tar = "0.4.40"
+tar = "0.4.42"
 # docker
-bollard = "0.15.0"
+bollard = "0.17.1"
 # hashing
 hex = "0.4.3"
-sha3 = "0.11.0-pre.3"
+sha3 = "0.11.0-pre.4"
 # serialization
-serde = { version = "1.0.197", features = ["derive"] }
-serde_json = "1.0.114"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
