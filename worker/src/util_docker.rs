@@ -17,7 +17,7 @@ use bollard::Docker;
 use futures_util::StreamExt;
 use log::{debug, error, info};
 use memfile::MemFile;
-use tar::Builder;
+use tar::{Builder, HeaderMode};
 use tokio::runtime;
 
 /// Default timeout for sandboxed execution
@@ -176,6 +176,8 @@ impl Dock {
 
         let mut tarball = Builder::new(tx);
         tarball.follow_symlinks(false);
+        tarball.mode(HeaderMode::Deterministic);
+        tarball.sparse(false);
         tarball.append_dir_all(".", path)?;
         tarball.finish()?;
         let mut tx = tarball.into_inner()?;
