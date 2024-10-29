@@ -13,7 +13,7 @@ BASE_DIR=$(dirname "$SCRIPT_DIR")
 sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt-get install -y \
-  build-essential wget curl linux-tools-$(uname -r)
+  build-essential wget curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 # install docker (if not installed yet)
@@ -29,7 +29,12 @@ fi
 # tweak settings
 sudo apt-get purge -y apport
 sudo sysctl -w kernel.core_pattern=core.%e.%p
-sudo cpupower frequency-set -g performance
+
+cd /sys/devices/system/cpu
+if [ -f cpu0/cpufreq/scaling_governor ]; then
+  echo performance | sudo tee cpu*/cpufreq/scaling_governor
+fi
+cd -
 
 # refresh shell
 source ~/.profile
