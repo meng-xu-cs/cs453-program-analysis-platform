@@ -13,7 +13,7 @@ BASE_DIR=$(dirname "$SCRIPT_DIR")
 sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt-get install -y \
-  build-essential wget curl linux-tools-generic
+  build-essential wget curl linux-tools-$(uname -r)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 # install docker (if not installed yet)
