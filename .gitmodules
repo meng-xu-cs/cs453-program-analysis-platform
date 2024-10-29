@@ -4,6 +4,3 @@
 [submodule "worker/deps/klee"]
 	path = worker/deps/klee
 	url = https://github.com/klee/klee.git
-[submodule "worker/deps/symcc"]
-	path = worker/deps/symcc
-	url = https://github.com/eurecom-s3/symcc.git
