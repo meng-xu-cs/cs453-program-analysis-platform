@@ -5,9 +5,8 @@ use crate::packet::{Packet, Registry};
 use crate::tool_aflpp::{run_aflpp, ResultAFLpp};
 use crate::tool_gcov::{run_baseline, run_gcov, ResultBaseline, ResultGcov};
 use crate::tool_klee::{run_klee, ResultKLEE};
-use crate::tool_symcc::{run_symcc, ResultSymCC};
 use crate::util_docker::Dock;
-use crate::{tool_aflpp, tool_gcov, tool_klee, tool_symcc};
+use crate::{tool_aflpp, tool_gcov, tool_klee};
 
 /// Provision all the tools
 pub fn provision(force: bool) -> Result<()> {
@@ -15,7 +14,6 @@ pub fn provision(force: bool) -> Result<()> {
     tool_gcov::provision(&dock, force)?;
     tool_aflpp::provision(&dock, force)?;
     tool_klee::provision(&dock, force)?;
-    tool_symcc::provision(&dock, force)?;
     Ok(())
 }
 
@@ -25,7 +23,6 @@ pub struct AnalysisResult {
     result_gcov: ResultGcov,
     result_aflpp: ResultAFLpp,
     result_klee: ResultKLEE,
-    result_symcc: ResultSymCC,
 }
 
 impl AnalysisResult {
@@ -43,9 +40,6 @@ impl AnalysisResult {
             "==== KLEE ====".to_string(),
             self.result_klee.to_human_readable(),
             String::new(),
-            "==== SymCC ====".to_string(),
-            self.result_symcc.to_human_readable(),
-            String::new(),
         ]
         .join("\n")
     }
@@ -57,7 +51,6 @@ pub fn analyze(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Anal
     let result_gcov = run_gcov(dock, registry, packet)?;
     let result_aflpp = run_aflpp(dock, registry, packet)?;
     let result_klee = run_klee(dock, registry, packet)?;
-    let result_symcc = run_symcc(dock, registry, packet)?;
 
     // collect and dump result
     Ok(AnalysisResult {
@@ -65,6 +58,5 @@ pub fn analyze(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Anal
         result_gcov,
         result_aflpp,
         result_klee,
-        result_symcc,
     })
 }

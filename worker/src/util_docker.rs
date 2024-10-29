@@ -35,7 +35,7 @@ pub enum ExitStatus {
 
 /// Utility for waiting for async actions
 fn wait_for<F: Future>(future: F) -> F::Output {
-    let rt = runtime::Builder::new_multi_thread()
+    let rt = runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
