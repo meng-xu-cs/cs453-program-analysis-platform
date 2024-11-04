@@ -27,7 +27,7 @@ static REGISTRY: Lazy<Registry> = Lazy::new(|| {
     fs::create_dir_all(&path).expect("unable to initialize the data directory");
 
     // construct the registry
-    Registry::new(path).expect("unable to initialize the registry")
+    Registry::new(path).unwrap_or_else(|e| panic!("unable to initialize the registry: {}", e))
 });
 
 /// The welcome message
