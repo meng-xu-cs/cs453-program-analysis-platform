@@ -6,7 +6,6 @@ use std::sync::RwLock;
 use std::{fs, io};
 
 use anyhow::{anyhow, bail, Result};
-use log::info;
 use sha3::{Digest, Sha3_256};
 
 use crate::process::AnalysisResult;
