@@ -219,7 +219,8 @@ pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
                 "bash".to_string(),
                 "-c".to_string(),
                 format!(
-                    "timeout {} {} < {}",
+                    "cd {} && timeout {} {} < {}",
+                    docked.path_output,
                     TIMEOUT_TEST_CASE.as_secs(),
                     dock_path_compiled,
                     test
@@ -238,8 +239,8 @@ pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "bash".to_string(),
             "-c".to_string(),
             format!(
-                "gcov -a -b -o {} -n main.c -j -t > {}",
-                docked.path_base, dock_path_gcov_report
+                "gcov -a -b -o {} -n -j -t main.c > {}",
+                docked.path_output, dock_path_gcov_report
             ),
         ],
         None,
