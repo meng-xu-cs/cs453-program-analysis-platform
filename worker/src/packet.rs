@@ -158,7 +158,7 @@ impl Registry {
         // - check size
         let meta = program.metadata()?;
         let size = meta.size();
-        if size > 256 * 1024 {
+        if size > 8 * 1024 {
             bail!("main.c is too big");
         }
         // - tweak permission

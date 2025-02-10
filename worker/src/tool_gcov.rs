@@ -290,37 +290,13 @@ fn parse_gcov_json_report(v: &Value) -> Option<(usize, usize)> {
     for item_file in report.get("files")?.as_array()? {
         let item_file = item_file.as_object()?;
 
-        let mut stats = BTreeMap::new();
         for item_func in item_file.get("functions")?.as_array()? {
             let item_func = item_func.as_object()?;
-            let item_name = item_func.get("name")?.as_str()?;
             let item_num_blocks = item_func.get("blocks")?.as_u64()? as usize;
             let item_cov_blocks = item_func.get("blocks_executed")?.as_u64()? as usize;
-            stats.insert(item_name, (item_num_blocks, item_cov_blocks));
-        }
 
-        for item_line in item_file.get("lines")?.as_array()? {
-            let item_line = item_line.as_object()?;
-            let item_func_name = match item_line.get("function_name") {
-                None => {
-                    continue;
-                }
-                Some(v) => v.as_str()?,
-            };
-            let (_, cov_block) = stats.get_mut(item_func_name)?;
-            for item_branch in item_line.get("branches")?.as_array()? {
-                let item_branch = item_branch.as_object()?;
-                let item_count = item_branch.get("count")?.as_u64()?;
-                if item_count == 0 {
-                    *cov_block += 1;
-                }
-            }
-        }
-
-        // aggregate the result
-        for (num_blocks, cov_blocks) in stats.values() {
-            total_num_blocks += *num_blocks;
-            total_cov_blocks += *cov_blocks;
+            total_num_blocks += item_num_blocks;
+            total_cov_blocks += item_cov_blocks;
         }
     }
 
