@@ -17,4 +17,4 @@ gcc -fprofile-arcs -ftest-coverage -g main.c -o ${WKS}/main
 for test in input/*; do
     ${WKS}/main < ${test}
 done
-gcov -o ${WKS} -n main.c
+gcov -a -b -c -o ${WKS} -t -H main.c
