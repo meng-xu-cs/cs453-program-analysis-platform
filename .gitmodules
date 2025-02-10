@@ -1,6 +1,0 @@
-[submodule "worker/deps/AFLplusplus"]
-	path = worker/deps/AFLplusplus
-	url = https://github.com/AFLplusplus/AFLplusplus.git
-[submodule "worker/deps/klee"]
-	path = worker/deps/klee
-	url = https://github.com/klee/klee.git

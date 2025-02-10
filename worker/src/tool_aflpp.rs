@@ -23,7 +23,7 @@ const TIMEOUT_FUZZ: Duration = Duration::from_secs(60 * 15);
 static DOCKER_PATH: Lazy<PathBuf> = Lazy::new(|| {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("deps");
-    path.push("AFLplusplus");
+    path.push("aflpp");
     path
 });
 
