@@ -1,9 +1,5 @@
 #!/bin/bash -e
 
-# settings
-export DEBIAN_FRONTEND=noninteractive
-export NEEDRESTART_MODE=a
-
 # path
 SCRIPT_FILE=$(realpath "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_FILE")
@@ -11,8 +7,10 @@ BASE_DIR=$(dirname "$SCRIPT_DIR")
 
 # install packages
 sudo apt-get update
-sudo apt-get upgrade -y
-sudo apt-get install -y \
+sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+  apt-get upgrade -y
+sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+  apt-get install -y \
   build-essential curl wget zip
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
