@@ -239,7 +239,7 @@ pub fn run_gcov(dock: &Dock, registry: &Registry, packet: &Packet) -> Result<Res
             "-c".to_string(),
             format!(
                 "gcov -a -b -o {} -n main.c -j -t > {}",
-                docked.path_output, dock_path_gcov_report
+                docked.path_base, dock_path_gcov_report
             ),
         ],
         None,
